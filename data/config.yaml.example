@@ -1,0 +1,43 @@
+# WIGO Base Configuration Example
+# Copy this file to config.yaml and fill in your real keys.
+
+server:
+  port: 5000
+  host: "0.0.0.0"
+
+ai:
+  provider: "gemini" # 'gemini' or 'ollama'
+  gemini:
+    api_key: "YOUR_GEMINI_API_KEY_HERE"
+    model: "gemini-1.5-pro-latest"
+  ollama:
+    base_url: "http://localhost:11434"
+    model: "llama3"
+
+scheduler:
+  noc_interval_hours: 4
+  siem_interval_hours: 4
+
+webhooks:
+  pushover:
+    enabled: false
+    url: "https://api.pushover.net/1/messages.json"
+    token: "YOUR_PUSHOVER_TOKEN_HERE"
+    user: "YOUR_PUSHOVER_USER_KEY_HERE"
+  homeassistant:
+    enabled: false
+    url: "http://homeassistant.local:8123/api/states/sensor.wigo_status"
+    token: "YOUR_HA_LONG_LIVED_ACCESS_TOKEN_HERE"
+
+thresholds:
+  - metric: "CPU"
+    condition: ">"
+    value: 95
+    severity: "critical"
+  - metric: "Disk"
+    condition: ">"
+    value: 90
+    severity: "warning"
+
+maintenance:
+  retention_days: 7
