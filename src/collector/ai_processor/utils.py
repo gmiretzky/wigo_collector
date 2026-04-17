@@ -12,7 +12,7 @@ def call_ai(prompt: str):
         try:
             gemini_config = ai_config.get("gemini", {})
             genai.configure(api_key=gemini_config.get("api_key"))
-            model = genai.GenerativeModel(gemini_config.get("model", "gemini-1.5-pro-latest"))
+            model = genai.GenerativeModel(gemini_config.get("model", "gemini-1.5-flash"))
             response = model.generate_content(prompt)
             return response.text
         except Exception as e:

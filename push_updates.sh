@@ -16,11 +16,15 @@ AUTH_REPO_URL="https://${GIT_USER}:${GIT_TOKEN}@${REPO_URL}"
 echo "Adding changes..."
 git add .
 
-COMMIT_MSG="refactor(agents): update collector URL logic and timestamp generation
+COMMIT_MSG="feat(collector): implement full-cycle AI analysis and notification refactoring
 
-- Split COLLECTOR_URL into COLLECTOR_HOST and COLLECTOR_PORT for better configuration in Proxmox and Ubuntu agents.
-- Replace deprecated datetime.utcnow() with datetime.now(timezone.utc) for better Python compatibility.
-- Standardize timestamp formatting to ISO 8601 UTC."
+- Implement 'Full Cycle' AI endpoint (Analyze & Purge) in maintenance router.
+- Refactor notification logic into a dedicated 'notifications' module.
+- Add AI context extraction endpoint for external processing.
+- Implement '---TRIM---' marker parsing in SIEM engine for dynamic Home Assistant triggers.
+- Update default Gemini model to gemini-1.5-flash for improved performance/cost.
+- Add 'Analyze & Purge' button to the dashboard UI with glassmorphism styling.
+- Add 'last-report' endpoint to retrieve latest stored AI analysis."
 
 echo "Committing..."
 if [ -n "$(git status --porcelain)" ]; then

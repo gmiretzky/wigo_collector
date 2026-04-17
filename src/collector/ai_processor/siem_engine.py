@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from src.collector.database import SessionLocal, LogEntry, Machine, AIAnalysis
 from src.collector.ai_processor.utils import call_ai
 from src.collector.settings import load_config
+from src.collector.notifications import send_notification
 import requests
 import json
 
@@ -55,6 +56,16 @@ def run_siem_analysis():
         )
         db.add(new_analysis)
         db.commit()
+
+        # Check for HA trigger
+        if "---TRIM---" in analysis:
+            try:
+                parts = analysis.split("---TRIM---")
+                trigger_data = json.loads(parts[1].strip())
+                if trigger_data.get("trigger_ha"):
+                    send_notification(trigger_data.get("message", "SIEM Alert Found"), "critical")
+            except:
+                pass
 
         return analysis
 

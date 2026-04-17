@@ -281,6 +281,33 @@ document.getElementById('process-ai-btn').onclick = async () => {
     }
 };
 
+document.getElementById('full-cycle-btn').onclick = async () => {
+    if (!confirm('Run full AI analysis and purge processed data?')) return;
+    
+    const btn = document.getElementById('full-cycle-btn');
+    const originalText = btn.innerText;
+    btn.disabled = true;
+    btn.innerText = 'Analyzing...';
+    
+    try {
+        const response = await fetch('/api/maintenance/full-cycle-ai', { method: 'POST' });
+        const data = await response.json();
+        
+        if (response.ok) {
+            alert('Analysis complete! Data has been purged and notifications sent.');
+            fetchData(); // Refresh everything
+        } else {
+            alert('Error: ' + data.detail);
+        }
+    } catch (error) {
+        console.error('Full cycle failed:', error);
+        alert('Network error or server failed.');
+    } finally {
+        btn.disabled = false;
+        btn.innerText = originalText;
+    }
+};
+
 // Initial fetch
 fetchData();
 

@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from src.collector.database import SessionLocal, Snapshot, Machine, AIAnalysis
 from src.collector.ai_processor.utils import call_ai
 from src.collector.settings import load_config
+from src.collector.notifications import send_notification
 import requests
 import json
 
@@ -62,8 +63,7 @@ def run_noc_analysis():
                 parts = analysis.split("---TRIM---")
                 trigger_data = json.loads(parts[1].strip())
                 if trigger_data.get("trigger_ha"):
-                    # Trigger HA notification logic here
-                    pass 
+                    send_notification(trigger_data.get("message", "NOC Insight Found"), "info")
             except:
                 pass
 
