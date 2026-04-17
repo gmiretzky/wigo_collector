@@ -2,11 +2,13 @@ import os
 import subprocess
 import json
 import requests
-from datetime import datetime
+from datetime import datetime, timezone
 import socket
 
 # Configuration - Update these
-COLLECTOR_URL = "http://YOUR_COLLECTOR_IP:5000/api/agents/report"
+COLLECTOR_HOST = "YOUR_COLLECTOR_IP" # Just the IP or Domain
+COLLECTOR_PORT = 5000
+COLLECTOR_URL = f"http://{COLLECTOR_HOST.rstrip(':')}:{COLLECTOR_PORT}/api/agents/report"
 MACHINE_NAME = socket.gethostname()
 
 def get_node_metrics():
@@ -61,7 +63,7 @@ def main():
     
     report = {
         "machine_name": MACHINE_NAME,
-        "timestamp": datetime.utcnow().isoformat() + "Z",
+        "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "metrics": metrics,
         "logs": logs
     }
