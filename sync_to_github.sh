@@ -37,7 +37,12 @@ COMMIT_MSG="feat(devops): initialize git and sync wigo collector to github
 - Add data/config.yaml.example for setup guidance
 - Prepare project for first push to gmiretzky/wigo_collector"
 
-git commit -m "$COMMIT_MSG"
+# Only commit if there are changes
+if [ -n "$(git status --porcelain)" ]; then
+    git commit -m "$COMMIT_MSG"
+else
+    echo "Nothing to commit, working tree clean. Proceeding to sync..."
+fi
 
 echo "Pulling existing remote changes (README.md) and rebasing..."
 # This handles the existing README.md on the remote repo
