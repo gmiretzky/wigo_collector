@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WIGO Management Interface</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"></script>
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="logo">
+                <span class="logo-icon">W</span>
+                <span class="logo-text">WIGO C2</span>
+            </div>
+            <nav class="nav-menu">
+                <a href="#" class="nav-item active" data-view="dashboard">
+                    <i data-feather="grid"></i> Dashboard
+                </a>
+                <a href="#" class="nav-item" data-view="agents">
+                    <i data-feather="cpu"></i> Agents
+                </a>
+                <a href="#" class="nav-item" data-view="reports">
+                    <i data-feather="activity"></i> AI Reports
+                </a>
+                <a href="#" class="nav-item" data-view="chat">
+                    <i data-feather="message-square"></i> Chat
+                </a>
+                <a href="#" class="nav-item" data-view="settings" id="settings-btn">
+                    <i data-feather="settings"></i> Settings
+                </a>
+            </nav>
+            <div class="sidebar-footer">
+                <div class="status-indicator">
+                    <span class="pulse"></span> System Healthy
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <header class="top-bar">
+                <h1 id="view-title">Dashboard</h1>
+                <div class="user-actions">
+                    <button class="btn btn-primary" id="refresh-btn">
+                        <i data-feather="refresh-cw"></i> Refresh
+                    </button>
+                </div>
+            </header>
+
+            <div id="dashboard-view" class="content-view active">
+                <!-- Stats Grid -->
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-icon agents"><i data-feather="users"></i></div>
+                        <div class="stat-info">
+                            <span class="stat-label">Total Agents</span>
+                            <h2 id="stat-total-agents">0</h2>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon active"><i data-feather="check-circle"></i></div>
+                        <div class="stat-info">
+                            <span class="stat-label">Active Agents</span>
+                            <h2 id="stat-active-agents">0</h2>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon pending"><i data-feather="clock"></i></div>
+                        <div class="stat-info">
+                            <span class="stat-label">Pending Actions</span>
+                            <h2 id="stat-pending-actions">0</h2>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Recent Activity & AI Analysis -->
+                <div class="dashboard-grid">
+                    <div class="card agents-list-card">
+                        <div class="card-header">
+                            <h3>Connected Agents</h3>
+                        </div>
+                        <div class="card-body">
+                            <table class="data-table" id="agents-table">
+                                <thead>
+                                    <tr>
+                                        <th>Hostname</th>
+                                        <th>IP Address</th>
+                                        <th>Brand</th>
+                                        <th>Status</th>
+                                        <th>Last Seen</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <!-- Dynamic Content -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div class="card reports-card">
+                        <div class="card-header">
+                            <h3>AI Analysis Reports</h3>
+                        </div>
+                        <div class="card-body" id="reports-list">
+                            <!-- Dynamic Content -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Chat View -->
+            <div id="chat-view" class="content-view">
+                <div class="chat-container card">
+                    <div class="chat-sidebar-list">
+                        <div class="card-header"><h3>Agents</h3></div>
+                        <div class="agent-list" id="chat-agent-list">
+                            <!-- Dynamic Content -->
+                        </div>
+                    </div>
+                    <div class="chat-main">
+                        <div class="chat-header" id="selected-agent-name">Select an agent to start chatting</div>
+                        <div class="chat-messages" id="chat-messages">
+                            <!-- Messages -->
+                        </div>
+                        <div class="chat-input-area">
+                            <input type="text" id="chat-input" placeholder="Type a command or message..." disabled>
+                            <button class="btn btn-primary" id="chat-send" disabled>Send</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Settings View -->
+            <div id="settings-view" class="content-view">
+                <div class="card">
+                    <div class="card-header">
+                        <h3>System Settings</h3>
+                    </div>
+                    <div class="card-body">
+                        <div class="settings-section">
+                            <h4>AI Configuration</h4>
+                            <form id="ai-settings-form" class="settings-form">
+                                <div class="form-group">
+                                    <label>AI Provider</label>
+                                    <select name="ai_provider" class="form-control">
+                                        <option value="gemini">Google Gemini</option>
+                                        <option value="ollama">Local Ollama</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label>AI Token / API Key</label>
+                                    <input type="password" name="ai_token" class="form-control" placeholder="Enter API Key">
+                                </div>
+                                <div class="form-group">
+                                    <label>Notification Webhook URL</label>
+                                    <input type="text" name="notification_url" class="form-control" placeholder="https://...">
+                                </div>
+                                <button type="submit" class="btn btn-primary">Save Settings</button>
+                            </form>
+                        </div>
+                        <hr class="my-30" style="margin: 30px 0; border: 0; border-top: 1px solid var(--border);">
+                        <div class="settings-section">
+                            <h4>Certificate Management</h4>
+                            <p class="section-desc">Upload valid Root CA and Private Key to override self-generated ones.</p>
+                            <form id="cert-upload-form" class="settings-form">
+                                <div class="form-group">
+                                    <label>Root CA Certificate (.pem)</label>
+                                    <input type="file" name="ca_cert" accept=".pem">
+                                </div>
+                                <div class="form-group">
+                                    <label>Private Key (.key)</label>
+                                    <input type="file" name="ca_key" accept=".key">
+                                </div>
+                                <button type="submit" class="btn btn-primary">Upload Certificates</button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        let selectedAgentId = null;
+        let chatInterval = null;
+
+        // Data Fetching and UI Logic
+        async function fetchStats() {
+            const res = await fetch('/api/dashboard/stats');
+            const data = await res.json();
+            document.getElementById('stat-total-agents').textContent = data.total_agents;
+            document.getElementById('stat-active-agents').textContent = data.active_agents;
+            document.getElementById('stat-pending-actions').textContent = data.pending_actions;
+        }
+
+        async function fetchAgents() {
+            const res = await fetch('/api/dashboard/agents');
+            const agents = await res.json();
+            
+            // Update Dashboard Table
+            const tbody = document.querySelector('#agents-table tbody');
+            if (tbody) {
+                tbody.innerHTML = agents.map(agent => `
+                    <tr>
+                        <td><strong>${agent.hostname}</strong></td>
+                        <td>${agent.ip_address}</td>
+                        <td>${agent.brand}</td>
+                        <td><span class="badge ${agent.status.toLowerCase()}">${agent.status}</span></td>
+                        <td>${new Date(agent.last_checkin).toLocaleString()}</td>
+                    </tr>
+                `).join('');
+            }
+
+            // Update Chat Agent List
+            const chatList = document.getElementById('chat-agent-list');
+            if (chatList) {
+                chatList.innerHTML = agents.map(agent => `
+                    <div class="agent-item ${selectedAgentId === agent.id ? 'active' : ''}" onclick="selectAgent(${agent.id}, '${agent.hostname}')">
+                        <span class="status-dot ${agent.status.toLowerCase()}"></span>
+                        ${agent.hostname}
+                    </div>
+                `).join('');
+            }
+        }
+
+        async function fetchReports() {
+            const res = await fetch('/api/dashboard/reports');
+            const reports = await res.json();
+            const container = document.getElementById('reports-list');
+            if (container) {
+                container.innerHTML = reports.map(report => `
+                    <div class="report-item">
+                        <div class="report-meta">
+                            <span class="report-status ${report.status.toLowerCase()}">${report.status}</span>
+                            <span class="report-time">${new Date(report.created_at).toLocaleTimeString()}</span>
+                        </div>
+                        <div class="report-content">
+                            <h4>${report.command}</h4>
+                            <p>${report.rationale}</p>
+                        </div>
+                        ${report.status === 'PENDING' ? `
+                            <div class="report-actions">
+                                <button class="btn btn-sm btn-success" onclick="approveAction(${report.id}, '${report.approval_token}')">Approve</button>
+                                <button class="btn btn-sm btn-danger" onclick="rejectAction(${report.id}, '${report.approval_token}')">Reject</button>
+                            </div>
+                        ` : ''}
+                    </div>
+                `).join('');
+            }
+        }
+
+        // Chat Logic
+        function selectAgent(id, hostname) {
+            selectedAgentId = id;
+            document.getElementById('selected-agent-name').textContent = `Chatting with ${hostname}`;
+            document.getElementById('chat-input').disabled = false;
+            document.getElementById('chat-send').disabled = false;
+            
+            // Highlight selected
+            document.querySelectorAll('.agent-item').forEach(el => el.classList.remove('active'));
+            fetchAgents(); // Refresh list to show active state
+            
+            fetchMessages();
+            if (chatInterval) clearInterval(chatInterval);
+            chatInterval = setInterval(fetchMessages, 3000);
+        }
+
+        async function fetchMessages() {
+            if (!selectedAgentId) return;
+            const res = await fetch(`/api/chat/messages/${selectedAgentId}`);
+            const messages = await res.json();
+            const container = document.getElementById('chat-messages');
+            container.innerHTML = messages.map(msg => `
+                <div class="message ${msg.sender}">
+                    <div class="msg-meta">${msg.sender} • ${new Date(msg.timestamp).toLocaleTimeString()}</div>
+                    <div class="msg-bubble">${msg.content}</div>
+                </div>
+            `).join('');
+            container.scrollTop = container.scrollHeight;
+        }
+
+        async function sendMessage() {
+            const input = document.getElementById('chat-input');
+            const content = input.value.trim();
+            if (!content || !selectedAgentId) return;
+            
+            await fetch('/api/chat/send', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    agent_id: selectedAgentId,
+                    content: content,
+                    sender: 'user'
+                })
+            });
+            input.value = '';
+            fetchMessages();
+        }
+
+        document.getElementById('chat-send').onclick = sendMessage;
+        document.getElementById('chat-input').onkeypress = (e) => { if(e.key === 'Enter') sendMessage(); };
+
+        // Settings Logic
+        async function loadSettings() {
+            const res = await fetch('/api/config/settings');
+            const settings = await res.json();
+            const form = document.getElementById('ai-settings-form');
+            if (settings.ai_provider) form.elements.ai_provider.value = settings.ai_provider;
+            if (settings.ai_token) form.elements.ai_token.value = settings.ai_token;
+            if (settings.notification_url) form.elements.notification_url.value = settings.notification_url;
+        }
+
+        document.getElementById('ai-settings-form').onsubmit = async (e) => {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            const data = Object.fromEntries(formData.entries());
+            await fetch('/api/config/settings', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+            alert('Settings saved!');
+        };
+
+        // UI Helpers
+        async function approveAction(id, token) {
+            await fetch(`/api/actions/${id}/approve?token=${token}`, { method: 'POST' });
+            refreshAll();
+        }
+
+        async function rejectAction(id, token) {
+            await fetch(`/api/actions/${id}/reject?token=${token}`, { method: 'POST' });
+            refreshAll();
+        }
+
+        function refreshAll() {
+            fetchStats();
+            fetchAgents();
+            fetchReports();
+            loadSettings();
+        }
+
+        // View Switching
+        document.querySelectorAll('.nav-item').forEach(item => {
+            item.addEventListener('click', (e) => {
+                e.preventDefault();
+                const view = item.getAttribute('data-view');
+                document.querySelectorAll('.content-view').forEach(v => v.classList.remove('active'));
+                document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+                
+                document.getElementById(`${view}-view`).classList.add('active');
+                item.classList.add('active');
+                document.getElementById('view-title').textContent = view.charAt(0).toUpperCase() + view.slice(1);
+                
+                if (view !== 'chat' && chatInterval) {
+                    clearInterval(chatInterval);
+                    chatInterval = null;
+                }
+            });
+        });
+
+        // Cert Upload
+        document.getElementById('cert-upload-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            try {
+                const res = await fetch('/api/config/certs/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await res.json();
+                alert(data.message || data.detail);
+            } catch (err) {
+                alert('Upload failed: ' + err.message);
+            }
+        });
+
+        document.getElementById('refresh-btn').addEventListener('click', refreshAll);
+
+        // Initial Load
+        refreshAll();
+        feather.replace();
+    </script>
+</body>
+</html>

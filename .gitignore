@@ -1,5 +1,12 @@
-# Sensitive data
-data/config.yaml
+# Tools
+git-tools/
+scripts/
+
+# Database, Certs and Logs
+wigo.db
+certs/
+backup/
+AGENTS.md
 
 # Python
 __pycache__/

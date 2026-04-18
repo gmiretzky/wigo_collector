@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+sqlalchemy
+cryptography
+pydantic
+requests
+google-generativeai
+docker
+python-multipart
+jinja2
