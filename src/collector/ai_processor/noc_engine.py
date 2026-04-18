@@ -3,18 +3,41 @@ from sqlalchemy.orm import Session
 from src.collector.database import SessionLocal, Snapshot, Machine, AIAnalysis
 from src.collector.ai_processor.utils import call_ai
 from src.collector.settings import load_config
-from src.collector.notifications import send_notification
+from src.collector.notifications import send_notification, forward_analysis
 import requests
 import json
+
+def calculate_metrics_digest(snapshots):
+    digest = {}
+    for s in snapshots:
+        for m in s.metrics:
+            obj = m["object"]
+            val = m["value"]
+            if obj not in digest:
+                digest[obj] = {"min": val, "max": val, "sum": val, "count": 1, "unit": m["unit"]}
+            else:
+                digest[obj]["min"] = min(digest[obj]["min"], val)
+                digest[obj]["max"] = max(digest[obj]["max"], val)
+                digest[obj]["sum"] += val
+                digest[obj]["count"] += 1
+    
+    final_digest = {}
+    for obj, stats in digest.items():
+        final_digest[obj] = {
+            "min": stats["min"],
+            "max": stats["max"],
+            "avg": round(stats["sum"] / stats["count"], 2),
+            "unit": stats["unit"]
+        }
+    return final_digest
 
 def run_noc_analysis():
     db = SessionLocal()
     try:
-        # Get data from the last 4 hours
         time_threshold = datetime.utcnow() - timedelta(hours=4)
         machines = db.query(Machine).all()
         
-        system_state = []
+        system_digest = []
         for machine in machines:
             snapshots = db.query(Snapshot).filter(
                 Snapshot.machine_id == machine.id,
@@ -22,27 +45,36 @@ def run_noc_analysis():
             ).all()
             
             if snapshots:
-                machine_data = {
-                    "name": machine.name,
-                    "metrics_history": [s.metrics for s in snapshots]
+                machine_digest = {
+                    "machine": machine.name,
+                    "metrics_digest": calculate_metrics_digest(snapshots)
                 }
-                system_state.append(machine_data)
+                system_digest.append(machine_digest)
 
-        if not system_state:
+        if not system_digest:
             return "No data collected in the last 4 hours."
 
         prompt = f"""
         You are a NOC (Network Operations Center) specialist. 
-        Analyze the following system metrics collected over the last 4 hours.
+        Analyze the following system health digest for the last 4 hours.
         Identify trends, bottlenecks, or potential future failures.
         
-        Data:
-        {json.dumps(system_state, indent=2, default=str)}
+        Digest:
+        {json.dumps(system_digest, indent=2, default=str)}
         
-        Provide a concise 'State of the Union' report. 
-        If you find critical trends, format a JSON object at the end of your response like this:
+        CRITICAL INSTRUCTIONS:
+        1. Provide a concise 'State of the Union' health report in text.
+        2. If you need more details to find a root cause, you MUST include a JSON block in your response.
+        3. Use ONLY these JSON templates wrapped in ---TRIM---:
+        
+        To request more data:
         ---TRIM---
-        {{"trigger_ha": true, "message": "Insight details here"}}
+        {{"status_code": "more_data", "machine_name": "NAME", "more_data": ["cmd1", "cmd2"]}}
+        ---TRIM---
+        
+        To trigger a notification alert:
+        ---TRIM---
+        {{"trigger_ha": true, "message": "DETAILS"}}
         ---TRIM---
         """
         
@@ -57,15 +89,23 @@ def run_noc_analysis():
         db.add(new_analysis)
         db.commit()
 
-        # Check for HA trigger
+        # Handle JSON triggers
         if "---TRIM---" in analysis:
             try:
                 parts = analysis.split("---TRIM---")
-                trigger_data = json.loads(parts[1].strip())
-                if trigger_data.get("trigger_ha"):
-                    send_notification(trigger_data.get("message", "NOC Insight Found"), "info")
-            except:
-                pass
+                # Handle multiple JSONs if present
+                for part in parts[1::2]:
+                    data = json.loads(part.strip())
+                    if data.get("status_code") == "more_data":
+                        # Forward to specialized webhook
+                        forward_analysis(data)
+                        # Also send a notification
+                        msg = f"AI requested more data for {data.get('machine_name')}"
+                        send_notification(msg, "info")
+                    if data.get("trigger_ha"):
+                        send_notification(data.get("message", "NOC Insight"), "info")
+            except Exception as e:
+                print(f"Error parsing AI JSON: {e}")
 
         return analysis
 

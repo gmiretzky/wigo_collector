@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import List
 from pydantic import BaseModel
 import requests
@@ -11,6 +11,39 @@ from src.collector.settings import load_config
 from src.collector.notifications import send_notification
 
 router = APIRouter()
+
+def should_filter_log(message: str) -> bool:
+    """Filter out routine info logs to save space and AI tokens."""
+    routine_patterns = ["User logged in", "session opened", "session closed", "New session", "Removed session"]
+    for pattern in routine_patterns:
+        if pattern.lower() in message.lower():
+            return True
+    return False
+
+def process_logs(db: Session, machine_id: int, log_messages: List[str], source="agent"):
+    for msg in log_messages:
+        if should_filter_log(msg):
+            continue
+            
+        # Deduplication logic: Check if same log exists for this machine in entire history
+        existing_log = db.query(LogEntry).filter(
+            LogEntry.machine_id == machine_id,
+            LogEntry.message == msg,
+            LogEntry.source == source
+        ).first()
+        
+        if existing_log:
+            existing_log.count += 1
+            existing_log.timestamp = datetime.utcnow()
+        else:
+            new_log = LogEntry(
+                machine_id=machine_id, 
+                message=msg, 
+                source=source,
+                timestamp=datetime.utcnow(),
+                count=1
+            )
+            db.add(new_log)
 
 class MetricSchema(BaseModel):
     object: str
@@ -67,14 +100,8 @@ async def receive_report(report: AgentReport, db: Session = Depends(get_db)):
     )
     db.add(snapshot)
 
-    # Save Logs
-    for log_msg in report.logs:
-        log_entry = LogEntry(
-            machine_id=machine.id,
-            timestamp=datetime.utcnow(),
-            message=log_msg
-        )
-        db.add(log_entry)
+    # Process and Save Logs (Deduplicated)
+    process_logs(db, machine.id, report.logs)
 
     db.commit()
 

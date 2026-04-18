@@ -16,15 +16,16 @@ AUTH_REPO_URL="https://${GIT_USER}:${GIT_TOKEN}@${REPO_URL}"
 echo "Adding changes..."
 git add .
 
-COMMIT_MSG="feat(collector): implement full-cycle AI analysis and notification refactoring
+COMMIT_MSG="feat(collector): implement log deduplication, health digests, and maintenance upgrades
 
-- Implement 'Full Cycle' AI endpoint (Analyze & Purge) in maintenance router.
-- Refactor notification logic into a dedicated 'notifications' module.
-- Add AI context extraction endpoint for external processing.
-- Implement '---TRIM---' marker parsing in SIEM engine for dynamic Home Assistant triggers.
-- Update default Gemini model to gemini-1.5-flash for improved performance/cost.
-- Add 'Analyze & Purge' button to the dashboard UI with glassmorphism styling.
-- Add 'last-report' endpoint to retrieve latest stored AI analysis."
+- Implement log deduplication logic with 'count' tracking in LogEntry.
+- Add routine log filtering (e.g., auth sessions) to optimize AI token usage.
+- Upgrade maintenance endpoints:
+  - 'purge' now supports targeted days (0 for full wipe).
+  - 'context' now supports machine/IP filtering and syslog mapping integration.
+- Implement 'Health Digest' concept: ranking logs and aggregating metrics for AI.
+- Add optional AI analysis forwarding to an external webhook.
+- Update README.md with comprehensive project documentation and API guide."
 
 echo "Committing..."
 if [ -n "$(git status --porcelain)" ]; then

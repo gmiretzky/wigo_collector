@@ -36,6 +36,7 @@ class LogEntry(Base):
     timestamp = Column(DateTime, default=datetime.utcnow, index=True)
     message = Column(String)
     source = Column(String, default="agent") # 'agent' or 'syslog'
+    count = Column(Integer, default=1)
 
 class SyslogMapping(Base):
     __tablename__ = "syslog_mappings"
@@ -61,6 +62,10 @@ def init_db():
     if 'source' not in columns:
         with engine.connect() as conn:
             conn.execute(text("ALTER TABLE logs ADD COLUMN source VARCHAR DEFAULT 'agent'"))
+            conn.commit()
+    if 'count' not in columns:
+        with engine.connect() as conn:
+            conn.execute(text("ALTER TABLE logs ADD COLUMN count INTEGER DEFAULT 1"))
             conn.commit()
 
 def get_db():

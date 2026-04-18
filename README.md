@@ -1,69 +1,52 @@
-# WIGO (What Is Going On)
+# WIGO - What Is Going On
 
-WIGO is a lightweight, centralized monitoring and AI-analysis system designed for homelabs and infrastructure. It provides a unified observability layer with automated AI insights for both Performance (NOC) and Security (SIEM).
+WIGO is a lightweight, centralized observability system designed for homelabs and infrastructure monitoring. It combines real-time metric collection with AI-driven NOC and SIEM analysis.
 
-## Features
+## Core Features
 
-- **Centralized Collector**: Dockerized FastAPI service with SQLite backend.
-- **Modern Dashboard**: Premium, dark-mode, glassmorphism UI for real-time status.
-- **Dual AI Operations**:
-  - **NOC Monitor**: Analyzes performance trends (CPU, RAM, Disk) every 4 hours.
-  - **SIEM Monitor**: Analyzes logs for security anomalies and threats.
-- **Syslog Server**: Built-in UDP/TCP port 514 listener to receive logs from network devices.
-- **Flexible AI Providers**: Built-in support for **Google Gemini** and local **Ollama**.
-- **Dynamic Integrations**: Configure Pushover, Home Assistant, or custom webhooks via the API/GUI.
-- **Threshold Alarms**: Immediate notifications for critical metrics (e.g., CPU > 95%).
-- **Swagger API**: Full programmatic control via `/docs`.
+- **Centralized Collector**: A FastAPI-based backend that gathers reports from multiple agents.
+- **Syslog Server**: Built-in UDP/TCP port 514 listener for network devices.
+- **Smart AI Engines**:
+  - **NOC Monitor**: Analyzes performance trends and calculates health digests.
+  - **SIEM Monitor**: Detects security anomalies and unique error patterns.
+- **Drill-Down Capability**: AI can automatically request more troubleshooting data/commands.
+- **Automated Notifications**: Integrated with Pushover and Home Assistant for instant alerts.
+- **Efficient Storage**: Local log deduplication and configurable data retention.
+- **Modern Dashboard**: Responsive UI with glassmorphism aesthetics.
 
-## Directory Structure
+## Project Structure
 
-- `/docker`: Docker Compose and Dockerfile configuration.
-- `/src/collector`: Backend FastAPI source code.
-- `/data`: Persistent storage for database and configuration (mapped to volume).
-- `/agents`: Distributed scripts for Proxmox, Ubuntu, and MikroTik.
+- `/src/collector`: Backend FastAPI server and AI engines.
+- `/agents`: Monitoring scripts for Proxmox, Ubuntu, and MikroTik.
+- `/data`: Persistent storage for SQLite DB and configuration.
+- `/docker`: Containerization files.
 
-## Setup Instructions
+## API Documentation
 
-### 1. Deploy the Collector
+The Collector exposes a full REST API. Auto-generated docs are available at `/docs`.
 
-Ensure you have Docker and Docker Compose installed.
+### Key Maintenance Endpoints
 
-```bash
-cd docker
-docker-compose up -d --build
-```
+- `POST /api/maintenance/purge?days=X`: 
+  - Purges data older than X days.
+  - Set `days=0` to purge everything.
+- `GET /api/maintenance/context?machine=NAME_OR_IP`:
+  - Returns a text digest of the last 4 hours for AI context.
+  - Can be filtered by machine name or IP address.
+- `GET /api/maintenance/last-report`: Returns the most recent AI analysis report.
+- `POST /api/maintenance/full-cycle-ai`: Runs analysis, sends notifications, and purges data in one go.
 
-The dashboard will be available at `http://localhost:5000`.
-The API documentation is at `http://localhost:5000/docs`.
+## Setup & Deployment
 
-### 2. Configure the System
+1. **Configure**: Edit `data/config.yaml` with your AI API keys and webhook tokens.
+2. **Deploy**:
+   ```bash
+   docker-compose up -d --build
+   ```
+3. **Deploy Agents**: Copy scripts from `/agents` to your target machines and set them as cron jobs.
 
-Edit `data/config.yaml` or use the API/GUI to set:
-- AI API Keys (Gemini/Ollama).
-- Thresholds for alerts.
-- Webhook tokens for Pushover/Home Assistant.
-
-### 3. Deploy Agents
-
-#### Proxmox Agent
-1. Copy `agents/proxmox/wigo_proxmox.py` to your Proxmox node.
-2. Edit the `COLLECTOR_URL` in the script.
-3. Install dependencies: `pip install requests` (or use a venv).
-4. Add to crontab: `*/5 * * * * /usr/bin/python3 /path/to/wigo_proxmox.py`
-
-#### Ubuntu Agent
-1. Copy `agents/ubuntu/wigo_ubuntu.py` to your server.
-2. Edit the `COLLECTOR_URL`.
-3. Add to crontab: `*/5 * * * * /usr/bin/python3 /path/to/wigo_ubuntu.py`
-
-#### MikroTik Agent
-1. Import `agents/mikrotik/wigo_mikrotik.rsc` into your RouterOS.
-2. Update the `collectorUrl` in the script.
-3. Schedule the script in `/system scheduler`.
-
-## AI Analysis Strategy
-
-WIGO uses **Bulk Processing** to optimize token usage and context awareness. Instead of analyzing every heartbeat, it aggregates data every 4 hours and sends a "State of the Union" report to the AI.
-
-- **NOC Analysis**: Looks for slow climbs in usage, potential bottlenecks, and capacity planning.
-- **SIEM Analysis**: Scans logs for brute-force attempts, unauthorized access, or unusual system behavior.
+## AI Optimization
+WIGO uses "Health Digests" to reduce token usage:
+- Metrics are sent as Min/Max/Avg aggregates.
+- Logs are deduplicated and ranked to prioritize errors over routine events.
+- AI can return JSON commands to request further "drill-down" data if needed.

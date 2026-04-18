@@ -12,23 +12,34 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 @router.post("/purge")
-async def purge_old_data(db: Session = Depends(get_db)):
+async def purge_old_data(days: int = None, db: Session = Depends(get_db)):
+    """
+    Purges logs and snapshots from the database.
+    - If days=0: Purges ALL data.
+    - If days > 0: Purges data older than X days.
+    - If days is None: Uses retention_days from config.yaml.
+    """
     config = load_config()
-    retention_days = config.get("maintenance", {}).get("retention_days", 7)
-    
-    cutoff_date = datetime.utcnow() - timedelta(days=retention_days)
+    if days is None:
+        days = config.get("maintenance", {}).get("retention_days", 7)
     
     try:
-        # Purge logs
-        deleted_logs = db.query(LogEntry).filter(LogEntry.timestamp < cutoff_date).delete()
-        
-        # Purge snapshots
-        deleted_snapshots = db.query(Snapshot).filter(Snapshot.timestamp < cutoff_date).delete()
+        if days == 0:
+            # Purge EVERYTHING
+            deleted_logs = db.query(LogEntry).delete()
+            deleted_snapshots = db.query(Snapshot).delete()
+            message = "Purged all data from the database"
+        else:
+            # Purge based on date
+            cutoff_date = datetime.utcnow() - timedelta(days=days)
+            deleted_logs = db.query(LogEntry).filter(LogEntry.timestamp < cutoff_date).delete()
+            deleted_snapshots = db.query(Snapshot).filter(Snapshot.timestamp < cutoff_date).delete()
+            message = f"Purged data older than {days} days"
         
         db.commit()
         return {
             "status": "success", 
-            "message": f"Purged data older than {retention_days} days",
+            "message": message,
             "deleted_logs": deleted_logs,
             "deleted_snapshots": deleted_snapshots
         }
@@ -65,7 +76,7 @@ async def full_cycle_ai(db: Session = Depends(get_db)):
         # 2. Trigger Notifications (The engines already handle saving to DB)
         
         # 3. Purge Data
-        purge_result = await purge_old_data(db)
+        purge_result = await purge_old_data(db=db)
         
         return {
             "status": "success",
@@ -78,22 +89,36 @@ async def full_cycle_ai(db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/context")
-async def get_ai_context(db: Session = Depends(get_db)):
+async def get_ai_context(machine: str = None, db: Session = Depends(get_db)):
     """
-    Returns all current metrics and logs formatted as a single text block 
-    for external AI processing.
+    Aggregates metrics and logs into a single text block for AI context.
+    - machine: Optional name or IP address to filter the data.
     """
     time_threshold = datetime.utcnow() - timedelta(hours=4)
-    machines = db.query(Machine).all()
+    
+    # Base query for machines
+    query = db.query(Machine)
+    if machine:
+        # Check if it's a machine name or a mapped IP
+        query = query.filter(Machine.name == machine)
+    
+    machines = query.all()
+    
+    # If filtering by IP, we might need to check syslog mappings
+    if not machines and machine:
+        from src.collector.database import SyslogMapping
+        mapping = db.query(SyslogMapping).filter(SyslogMapping.ip_address == machine).first()
+        if mapping:
+            machines = db.query(Machine).filter(Machine.name == mapping.machine_name).all()
     
     context = "### WIGO SYSTEM STATE (Last 4 Hours) ###\n\n"
     
-    for machine in machines:
-        context += f"--- MACHINE: {machine.name} ---\n"
+    for m in machines:
+        context += f"--- MACHINE: {m.name} ---\n"
         
-        # Metrics
+        # Metrics Digest
         snapshots = db.query(Snapshot).filter(
-            Snapshot.machine_id == machine.id,
+            Snapshot.machine_id == m.id,
             Snapshot.timestamp >= time_threshold
         ).all()
         if snapshots:
@@ -101,15 +126,16 @@ async def get_ai_context(db: Session = Depends(get_db)):
             for s in snapshots:
                 context += f"[{s.timestamp.isoformat()}] {json.dumps(s.metrics)}\n"
         
-        # Logs
+        # Log Entries (Top 20 most recent unique logs for context)
         logs = db.query(LogEntry).filter(
-            LogEntry.machine_id == machine.id,
+            LogEntry.machine_id == m.id,
             LogEntry.timestamp >= time_threshold
-        ).all()
+        ).order_by(LogEntry.timestamp.desc()).limit(20).all()
+        
         if logs:
             context += "LOG ENTRIES:\n"
             for l in logs:
-                context += f"[{l.timestamp.isoformat()}] {l.message}\n"
+                context += f"[{l.timestamp.isoformat()}] (Count: {l.count}) {l.message}\n"
         
         context += "\n"
         

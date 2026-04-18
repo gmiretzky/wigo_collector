@@ -25,3 +25,12 @@ def send_notification(message: str, severity: str):
             requests.post(ha["url"], headers=headers, json={"state": message, "attributes": {"severity": severity}}, timeout=5)
         except Exception as e:
             print(f"Failed to send HA notification: {e}")
+
+def forward_analysis(payload: dict):
+    config = load_config()
+    url = config.get("ai", {}).get("analysis_forwarding_webhook_url")
+    if url:
+        try:
+            requests.post(url, json=payload, timeout=10)
+        except Exception as e:
+            print(f"Failed to forward analysis: {e}")
