@@ -1,7 +1,11 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
-from src.wigo.database import get_db, Agent, Action, ActionStatus
+from src.wigo.database import get_db, Agent, Action, ActionStatus, AgentStatus
 from sqlalchemy import func
+from pydantic import BaseModel
+from typing import Optional
+import secrets
+import string
 
 router = APIRouter()
 
@@ -28,3 +32,54 @@ def get_reports(db: Session = Depends(get_db)):
     # Fetch recent AI actions as reports
     reports = db.query(Action).order_by(Action.created_at.desc()).limit(10).all()
     return reports
+
+class PreRegisterRequest(BaseModel):
+    hostname: str
+    ip_address: str
+    brand: str
+    company: str
+    module: str
+    software_version: str
+    description: Optional[str] = None
+
+@router.post("/dashboard/pre-register")
+def pre_register_agent(req: PreRegisterRequest, db: Session = Depends(get_db)):
+    # Generate a random token
+    alphabet = string.ascii_letters + string.digits
+    token = ''.join(secrets.choice(alphabet) for _ in range(16))
+    
+    new_agent = Agent(
+        hostname=req.hostname,
+        ip_address=req.ip_address,
+        brand=req.brand,
+        company=req.company,
+        module=req.module,
+        software_version=req.software_version,
+        description=req.description,
+        registration_token=token,
+        status=AgentStatus.PENDING
+    )
+    db.add(new_agent)
+    db.commit()
+    
+    return {"token": token}
+
+@router.get("/dashboard/history")
+def get_action_history(db: Session = Depends(get_db)):
+    actions = db.query(Action).order_by(Action.created_at.desc()).all()
+    # Format for UI
+    history = []
+    for action in actions:
+        history.append({
+            "id": action.id,
+            "agent_hostname": action.agent.hostname if action.agent else "Unknown",
+            "command": action.command,
+            "rationale": action.rationale,
+            "status": action.status,
+            "executed_at": action.executed_at,
+            "result_stdout": action.result_stdout,
+            "result_stderr": action.result_stderr,
+            "exit_code": action.exit_code,
+            "ai_analysis": action.ai_analysis
+        })
+    return history

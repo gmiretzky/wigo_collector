@@ -1,0 +1,18 @@
+# WIGO Ubuntu Agent Configuration
+
+controller:
+  # The HTTP Management URL for initial registration
+  management_url: "http://localhost:5000"
+  # The HTTPS mTLS Agent API URL for ongoing communication
+  agent_api_url: "https://localhost:8443"
+  # Registration token obtained from the dashboard
+  registration_token: "YOUR_TOKEN_HERE"
+
+agent:
+  hostname: "ubuntu-host"
+  # Poll interval in seconds
+  poll_interval: 10
+
+paths:
+  cert_dir: "/etc/wigo/certs"
+  log_file: "/var/log/wigo/agent.log"

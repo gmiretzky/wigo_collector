@@ -9,6 +9,13 @@ class AIProvider(ABC):
         """
         pass
 
+    @abstractmethod
+    async def analyze_result(self, command: str, stdout: str, stderr: str, exit_code: int) -> str:
+        """
+        Analyze the result of a command execution.
+        """
+        pass
+
 class Brain:
     def __init__(self, provider: AIProvider):
         self.provider = provider
@@ -19,6 +26,13 @@ class Brain:
         """
         proposal = await self.provider.analyze(telemetry_data)
         return proposal
+
+    async def analyze_result(self, command: str, stdout: str, stderr: str, exit_code: int):
+        """
+        Analyze the output of an executed command.
+        """
+        analysis = await self.provider.analyze_result(command, stdout, stderr, exit_code)
+        return analysis
 
 # Global brain instance (will be configured via settings)
 _brain: Optional[Brain] = None

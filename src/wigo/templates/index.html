@@ -26,6 +26,9 @@
                 <a href="#" class="nav-item" data-view="reports">
                     <i data-feather="activity"></i> AI Reports
                 </a>
+                <a href="#" class="nav-item" data-view="history">
+                    <i data-feather="database"></i> Action History
+                </a>
                 <a href="#" class="nav-item" data-view="chat">
                     <i data-feather="message-square"></i> Chat
                 </a>
@@ -45,6 +48,9 @@
             <header class="top-bar">
                 <h1 id="view-title">Dashboard</h1>
                 <div class="user-actions">
+                    <button class="btn btn-secondary" id="add-agent-btn" style="display: none;">
+                        <i data-feather="plus"></i> Add Agent
+                    </button>
                     <button class="btn btn-primary" id="refresh-btn">
                         <i data-feather="refresh-cw"></i> Refresh
                     </button>
@@ -108,6 +114,58 @@
                         <div class="card-body" id="reports-list">
                             <!-- Dynamic Content -->
                         </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Agents View -->
+            <div id="agents-view" class="content-view">
+                <div class="card">
+                    <div class="card-header">
+                        <h3>Registered Agents</h3>
+                    </div>
+                    <div class="card-body">
+                        <table class="data-table" id="agents-view-table">
+                            <thead>
+                                <tr>
+                                    <th>Hostname</th>
+                                    <th>IP Address</th>
+                                    <th>Type</th>
+                                    <th>Version</th>
+                                    <th>Status</th>
+                                    <th>Last Seen</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <!-- Dynamic Content -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- History View -->
+            <div id="history-view" class="content-view">
+                <div class="card">
+                    <div class="card-header">
+                        <h3>Action Execution History</h3>
+                    </div>
+                    <div class="card-body">
+                        <div class="history-list" id="history-list">
+                            <!-- Dynamic Content -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Reports View -->
+            <div id="reports-view" class="content-view">
+                <div class="card">
+                    <div class="card-header">
+                        <h3>AI Analysis Reports</h3>
+                    </div>
+                    <div class="card-body" id="reports-view-list">
+                        <!-- Dynamic Content -->
                     </div>
                 </div>
             </div>
@@ -184,9 +242,59 @@
         </main>
     </div>
 
+    <!-- Modals -->
+    <div class="modal" id="add-agent-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Add New Agent</h3>
+                <button class="close-modal">&times;</button>
+            </div>
+            <form id="add-agent-form">
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label>Hostname</label>
+                        <input type="text" id="form-hostname" name="hostname" required placeholder="ubuntu-srv-01">
+                        <small class="error-msg" id="error-hostname"></small>
+                    </div>
+                    <div class="form-group">
+                        <label>IP Address</label>
+                        <input type="text" id="form-ip" name="ip_address" required placeholder="192.168.1.50">
+                        <small class="error-msg" id="error-ip"></small>
+                    </div>
+                    <div class="form-group">
+                        <label>Agent Type</label>
+                        <select name="brand">
+                            <option value="Ubuntu">Ubuntu Linux</option>
+                            <option value="MikroTik">MikroTik RouterOS</option>
+                            <option value="Windows">Windows Server</option>
+                            <option value="Android">Android IoT</option>
+                        </select>
+                    </div>
+                    <div class="form-group" style="display: flex; align-items: center; gap: 10px; margin-top: 25px;">
+                        <input type="checkbox" id="form-module" name="module_local" checked style="width: 20px; height: 20px;">
+                        <label style="margin: 0;">Local Agent (Ubuntu)</label>
+                    </div>
+                    <div class="form-group" style="grid-column: span 2;">
+                        <label>Description</label>
+                        <textarea name="description" maxlength="255" rows="3" class="form-control" placeholder="Describe this agent's purpose..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="submit" class="btn btn-primary" id="submit-agent-btn">Register & Generate Token</button>
+                </div>
+            </form>
+            <div id="token-display" style="display: none; margin-top: 20px; padding: 15px; background: var(--bg-secondary); border-radius: 8px;">
+                <p>Registration Token:</p>
+                <code id="generated-token" style="font-size: 1.2rem; color: var(--primary);"></code>
+                <p style="font-size: 0.8rem; margin-top: 10px; color: var(--text-muted);">Copy this token. You will need it to install the agent.</p>
+            </div>
+        </div>
+    </div>
+
     <script>
-        let selectedAgentId = null;
-        let chatInterval = null;
+        document.addEventListener('DOMContentLoaded', () => {
+            let selectedAgentId = null;
+            let chatInterval = null;
 
         // Data Fetching and UI Logic
         async function fetchStats() {
@@ -201,19 +309,24 @@
             const res = await fetch('/api/dashboard/agents');
             const agents = await res.json();
             
-            // Update Dashboard Table
-            const tbody = document.querySelector('#agents-table tbody');
-            if (tbody) {
-                tbody.innerHTML = agents.map(agent => `
-                    <tr>
-                        <td><strong>${agent.hostname}</strong></td>
-                        <td>${agent.ip_address}</td>
-                        <td>${agent.brand}</td>
-                        <td><span class="badge ${agent.status.toLowerCase()}">${agent.status}</span></td>
-                        <td>${new Date(agent.last_checkin).toLocaleString()}</td>
-                    </tr>
-                `).join('');
-            }
+            const updateTable = (id) => {
+                const tbody = document.querySelector(`#${id} tbody`);
+                if (tbody) {
+                    tbody.innerHTML = agents.map(agent => `
+                        <tr>
+                            <td><strong>${agent.hostname}</strong></td>
+                            <td>${agent.ip_address}</td>
+                            <td>${agent.brand}</td>
+                            ${id === 'agents-view-table' ? `<td>${agent.software_version}</td>` : ''}
+                            <td><span class="badge ${agent.status.toLowerCase()}">${agent.status}</span></td>
+                            <td>${new Date(agent.last_checkin).toLocaleString()}</td>
+                        </tr>
+                    `).join('');
+                }
+            };
+
+            updateTable('agents-table');
+            updateTable('agents-view-table');
 
             // Update Chat Agent List
             const chatList = document.getElementById('chat-agent-list');
@@ -230,26 +343,64 @@
         async function fetchReports() {
             const res = await fetch('/api/dashboard/reports');
             const reports = await res.json();
-            const container = document.getElementById('reports-list');
-            if (container) {
-                container.innerHTML = reports.map(report => `
-                    <div class="report-item">
-                        <div class="report-meta">
-                            <span class="report-status ${report.status.toLowerCase()}">${report.status}</span>
-                            <span class="report-time">${new Date(report.created_at).toLocaleTimeString()}</span>
-                        </div>
-                        <div class="report-content">
-                            <h4>${report.command}</h4>
-                            <p>${report.rationale}</p>
-                        </div>
-                        ${report.status === 'PENDING' ? `
-                            <div class="report-actions">
-                                <button class="btn btn-sm btn-success" onclick="approveAction(${report.id}, '${report.approval_token}')">Approve</button>
-                                <button class="btn btn-sm btn-danger" onclick="rejectAction(${report.id}, '${report.approval_token}')">Reject</button>
+            const updateList = (id) => {
+                const container = document.getElementById(id);
+                if (container) {
+                    container.innerHTML = reports.map(report => `
+                        <div class="report-item">
+                            <div class="report-meta">
+                                <span class="report-status ${report.status.toLowerCase()}">${report.status}</span>
+                                <span class="report-time">${new Date(report.created_at).toLocaleTimeString()}</span>
                             </div>
-                        ` : ''}
+                            <div class="report-content">
+                                <h4>${report.command}</h4>
+                                <p>${report.rationale}</p>
+                            </div>
+                            ${report.status === 'PENDING' ? `
+                                <div class="report-actions">
+                                    <button class="btn btn-sm btn-success" onclick="approveAction(${report.id}, '${report.approval_token}')">Approve</button>
+                                    <button class="btn btn-sm btn-danger" onclick="rejectAction(${report.id}, '${report.approval_token}')">Reject</button>
+                                </div>
+                            ` : ''}
+                        </div>
+                    `).join('');
+                }
+            };
+            updateList('reports-list');
+            updateList('reports-view-list');
+        }
+
+        async function fetchHistory() {
+            const res = await fetch('/api/dashboard/history');
+            const history = await res.json();
+            const container = document.getElementById('history-list');
+            if (container) {
+                container.innerHTML = history.map(item => `
+                    <div class="history-item card mb-10">
+                        <div class="history-header">
+                            <span class="history-agent">${item.agent_hostname}</span>
+                            <span class="history-status ${item.status.toLowerCase()}">${item.status}</span>
+                            <span class="history-time">${new Date(item.executed_at || item.created_at).toLocaleString()}</span>
+                        </div>
+                        <div class="history-body">
+                            <div class="cmd-box"><code>${item.command}</code></div>
+                            <div class="rationale"><strong>Rationale:</strong> ${item.rationale}</div>
+                            ${item.result_stdout ? `
+                                <div class="result-box">
+                                    <p><strong>Stdout:</strong></p>
+                                    <pre>${item.result_stdout}</pre>
+                                </div>
+                            ` : ''}
+                            ${item.ai_analysis ? `
+                                <div class="analysis-box">
+                                    <i data-feather="cpu"></i>
+                                    <strong>AI Analysis:</strong> ${item.ai_analysis}
+                                </div>
+                            ` : ''}
+                        </div>
                     </div>
                 `).join('');
+                feather.replace();
             }
         }
 
@@ -341,6 +492,7 @@
             fetchStats();
             fetchAgents();
             fetchReports();
+            fetchHistory();
             loadSettings();
         }
 
@@ -356,6 +508,9 @@
                 item.classList.add('active');
                 document.getElementById('view-title').textContent = view.charAt(0).toUpperCase() + view.slice(1);
                 
+                // Show/Hide Add Agent button
+                document.getElementById('add-agent-btn').style.display = view === 'agents' ? 'block' : 'none';
+
                 if (view !== 'chat' && chatInterval) {
                     clearInterval(chatInterval);
                     chatInterval = null;
@@ -363,27 +518,87 @@
             });
         });
 
-        // Cert Upload
-        document.getElementById('cert-upload-form').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const formData = new FormData(e.target);
-            try {
-                const res = await fetch('/api/config/certs/upload', {
-                    method: 'POST',
-                    body: formData
-                });
-                const data = await res.json();
-                alert(data.message || data.detail);
-            } catch (err) {
-                alert('Upload failed: ' + err.message);
+        // Modal Logic
+        const modal = document.getElementById('add-agent-modal');
+        const addAgentBtn = document.getElementById('add-agent-btn');
+        const closeModalBtn = document.querySelector('.close-modal');
+
+        if (addAgentBtn) {
+            addAgentBtn.addEventListener('click', () => {
+                modal.classList.add('active');
+                document.getElementById('token-display').style.display = 'none';
+                document.getElementById('add-agent-form').style.display = 'block';
+            });
+        }
+
+        if (closeModalBtn) {
+            closeModalBtn.addEventListener('click', () => {
+                modal.classList.remove('active');
+            });
+        }
+        
+        // Close modal on outside click
+        window.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                modal.classList.remove('active');
             }
         });
+        
+        document.getElementById('add-agent-form').onsubmit = async (e) => {
+            e.preventDefault();
+            
+            const hostname = document.getElementById('form-hostname').value;
+            const ip = document.getElementById('form-ip').value;
+            const hostnameRegex = /^[a-zA-Z0-9_-]{3,16}$/;
+            const ipRegex = /^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$/;
+            
+            let valid = true;
+            if (!hostnameRegex.test(hostname)) {
+                document.getElementById('error-hostname').textContent = '3-16 chars, a-Z, 0-9, -, _';
+                valid = false;
+            } else {
+                document.getElementById('error-hostname').textContent = '';
+            }
+            
+            if (!ipRegex.test(ip)) {
+                document.getElementById('error-ip').textContent = 'Invalid IP Address format';
+                valid = false;
+            } else {
+                document.getElementById('error-ip').textContent = '';
+            }
+            
+            if (!valid) return;
+
+            const formData = new FormData(e.target);
+            const data = Object.fromEntries(formData.entries());
+            
+            // Map checkbox to module string
+            data.module = data.module_local ? "local" : "controller";
+            delete data.module_local;
+            
+            // Default discovery fields (will be updated by agent)
+            data.software_version = "pending";
+            data.company = "discovery";
+            
+            const res = await fetch('/api/dashboard/pre-register', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+            const result = await res.json();
+            
+            document.getElementById('add-agent-form').style.display = 'none';
+            document.getElementById('token-display').style.display = 'block';
+            document.getElementById('generated-token').textContent = result.token;
+            refreshAll();
+        };
 
         document.getElementById('refresh-btn').addEventListener('click', refreshAll);
 
         // Initial Load
         refreshAll();
         feather.replace();
-    </script>
+    });
+</script>
 </body>
 </html>

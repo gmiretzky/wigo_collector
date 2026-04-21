@@ -12,6 +12,11 @@ class TelemetryBurst(BaseModel):
     hostname: str
     data: str
 
+class ActionResult(BaseModel):
+    stdout: str
+    stderr: str
+    exit_code: int
+
 @router.post("/actions/telemetry")
 async def receive_telemetry(burst: TelemetryBurst, db: Session = Depends(get_db)):
     agent = db.query(Agent).filter(Agent.hostname == burst.hostname).first()
@@ -94,3 +99,23 @@ def get_pending_actions(hostname: str, db: Session = Depends(get_db)):
     
     db.commit()
     return {"commands": commands}
+
+@router.post("/actions/{action_id}/result")
+async def receive_action_result(action_id: int, result: ActionResult, db: Session = Depends(get_db)):
+    action = db.query(Action).filter(Action.id == action_id).first()
+    if not action:
+        raise HTTPException(status_code=404, detail="Action not found")
+    
+    action.result_stdout = result.stdout
+    action.result_stderr = result.stderr
+    action.exit_code = result.exit_code
+    action.status = ActionStatus.EXECUTED if result.exit_code == 0 else ActionStatus.FAILED
+    action.executed_at = datetime.datetime.utcnow()
+    
+    # Process result with AI for analysis
+    brain = get_brain()
+    analysis = await brain.analyze_result(action.command, result.stdout, result.stderr, result.exit_code)
+    action.ai_analysis = analysis
+    
+    db.commit()
+    return {"status": "ok"}

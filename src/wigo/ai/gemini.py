@@ -41,3 +41,19 @@ class GeminiProvider(AIProvider):
                 "issue_detected": False,
                 "error": str(e)
             }
+
+    async def analyze_result(self, command: str, stdout: str, stderr: str, exit_code: int) -> str:
+        prompt = f"""
+        Review the execution result of the following command:
+        Command: {command}
+        Exit Code: {exit_code}
+        Stdout: {stdout}
+        Stderr: {stderr}
+        
+        Provide a concise analysis of whether the action was successful and what the current status is.
+        """
+        try:
+            response = self.model.generate_content(prompt)
+            return response.text.strip()
+        except Exception as e:
+            return f"Error during analysis: {str(e)}"

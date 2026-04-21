@@ -30,7 +30,9 @@ class Agent(Base):
     module = Column(String)  # e.g., local, remote-mikrotik
     software_version = Column(String)
     status = Column(Enum(AgentStatus), default=AgentStatus.PENDING)
-    cert_serial = Column(String, unique=True)
+    cert_serial = Column(String, unique=True, nullable=True)
+    registration_token = Column(String, unique=True, nullable=True)
+    description = Column(String, nullable=True)
     last_checkin = Column(DateTime, default=datetime.datetime.utcnow)
     metadata_json = Column(JSON)  # Store extra info
 
@@ -47,6 +49,11 @@ class Action(Base):
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     executed_at = Column(DateTime, nullable=True)
     approval_token = Column(String)  # For REST callback validation
+    
+    result_stdout = Column(String, nullable=True)
+    result_stderr = Column(String, nullable=True)
+    exit_code = Column(Integer, nullable=True)
+    ai_analysis = Column(String, nullable=True)
 
     agent = relationship("Agent", back_populates="actions")
 

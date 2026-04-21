@@ -1,0 +1,14 @@
+[Unit]
+Description=WIGO AI Agent
+After=network.target
+
+[Service]
+Type=simple
+User=wigo
+WorkingDirectory=/home/wigo
+ExecStart=/home/wigo/venv/bin/python3 /usr/local/bin/wigo-agent.py
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
