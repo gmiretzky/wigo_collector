@@ -7,6 +7,7 @@ from typing import Optional
 import secrets
 import string
 import re
+import os
 
 IP_REGEX = r"^(((?!25?[6-9])[12]\d|[1-9])?\d\.?\b){4}$"
 
@@ -35,6 +36,18 @@ def get_reports(db: Session = Depends(get_db)):
     # Fetch recent AI actions as reports
     reports = db.query(Action).order_by(Action.created_at.desc()).limit(10).all()
     return reports
+
+@router.get("/dashboard/agent-types")
+def get_agent_types():
+    """
+    Dynamically discover agent types by listing subdirectories in the 'agents' folder.
+    """
+    agents_dir = "agents"
+    if not os.path.exists(agents_dir):
+        return ["Ubuntu", "MikroTik", "Proxmox"] # Fallback
+    
+    # Return all subdirectories as agent types
+    return [d for d in os.listdir(agents_dir) if os.path.isdir(os.path.join(agents_dir, d))]
 
 class PreRegisterRequest(BaseModel):
     hostname: str

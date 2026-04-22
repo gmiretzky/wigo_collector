@@ -264,11 +264,9 @@
                     </div>
                     <div class="form-group">
                         <label>Agent Type</label>
-                        <select name="brand">
+                        <select name="brand" class="form-control" id="form-brand">
                             <option value="Ubuntu">Ubuntu Linux</option>
-                            <option value="MikroTik">MikroTik RouterOS</option>
-                            <option value="Windows">Windows Server</option>
-                            <option value="Android">Android IoT</option>
+                            <!-- Dynamically populated -->
                         </select>
                     </div>
                     <div class="form-group" style="display: flex; align-items: center; gap: 10px; margin-top: 25px;">
@@ -387,6 +385,21 @@
             };
             updateList('reports-list');
             updateList('reports-view-list');
+        }
+
+        async function fetchAgentTypes() {
+            try {
+                const res = await fetch('/api/dashboard/agent-types');
+                const types = await res.json();
+                const select = document.getElementById('form-brand');
+                if (select) {
+                    select.innerHTML = types.map(type => `
+                        <option value="${type}">${type.charAt(0).toUpperCase() + type.slice(1)}</option>
+                    `).join('');
+                }
+            } catch (err) {
+                console.error('Agent types fetch failed', err);
+            }
         }
 
         async function fetchHistory() {
@@ -565,6 +578,7 @@
 
         if (addAgentBtn) {
             addAgentBtn.addEventListener('click', () => {
+                fetchAgentTypes();
                 modal.classList.add('active');
                 document.getElementById('token-display').style.display = 'none';
                 document.getElementById('add-agent-form').style.display = 'block';
