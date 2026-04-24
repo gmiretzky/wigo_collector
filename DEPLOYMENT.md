@@ -1,46 +1,40 @@
 # WIGO Deployment & Certificate Management
 
-WIGO uses mutual TLS (mTLS) for all Agent-to-Controller communication. The Controller acts as a Private Certificate Authority (CA) and enforces token-based registration for security.
+WIGO uses standard TLS for server validation and HMAC-based authentication for agents. This removes the need for managing a private CA and individual agent certificates.
 
-## 1. Quick Start with Docker Compose
-The easiest way to run the WIGO Controller is using Docker Compose:
+## 1. Server Certificates
+The WIGO Controller should be configured with a valid, trusted certificate (e.g., from Let's Encrypt or your own trusted domain).
 
-1. **Set Environment Variables**: Create a `.env` file or export your Gemini API Key:
+1. **Upload Certificates**: Place your `fullchain.pem` and `privkey.pem` in a secure directory.
+2. **Configure Environment**:
    ```bash
-   echo "GEMINI_API_KEY=your_key_here" > .env
+   export WIGO_SERVER_CERT=/path/to/fullchain.pem
+   export WIGO_SERVER_KEY=/path/to/privkey.pem
    ```
-2. **Build and Start**:
-   ```bash
-   docker-compose up -d --build
-   ```
-3. **Verify**: 
-   - Management: `http://localhost:5000/`
-   - Agent API: `https://localhost:8443/health`
+3. **Restart Controller**: The agent interface (Port 8443) will now serve this certificate.
 
-## 2. Controller Architecture
-- **Management (Port 5000)**: HTTP only. Used for the Dashboard, configuration, and Action History.
-- **Agent API (Port 8443)**: HTTPS with mTLS. Used for telemetry and instruction polling.
+## 2. Agent Authentication (HMAC Handshake)
+Instead of mTLS, agents use a symmetric `registration_token` to sign every request.
 
-## 3. Agent Onboarding (The Handshake)
-WIGO now enforces a strict token-based registration process:
+1. **Get Token**: From the Management Dashboard, click "Add Agent" to generate a token for a specific Hostname/IP.
+2. **Handshake**: The agent uses the token to generate an HMAC-SHA256 signature of the payload and timestamp.
+3. **Verification**: The server validates the signature and timestamp to ensure the request is legit and fresh.
 
-1. **Pre-Register**: On the Dashboard, go to "Add Agent". Enter the machine's Hostname and IP.
-2. **Get Token**: The Controller generates a unique `registration_token`.
-3. **Register**: The Agent sends its CSR, metadata, and the `registration_token` to `/api/registration/register`.
-4. **Install Certs**: Upon valid token verification, the Controller signs the CSR and returns the certificate.
-5. **Start Telemetry**: The Agent is now authorized to send telemetry and poll for actions.
+## 3. Ubuntu Agent Deployment
+1. Install requirements: `pip install httpx psutil pyyaml`
+2. Configure `/etc/wigo/config.yaml` with the `registration_token` and `agent_api_url`.
+3. Run the agent: `python3 wigo-agent.py`
 
-## 4. Observability & Action Loop
-The system implements a closed-loop observability pattern:
+## 4. MikroTik Integration
+For MikroTik devices, the token is sent in an `Authorization` header. Ensure you are connecting over HTTPS to keep the token secure.
 
-1. **Analysis**: AI monitors telemetry and proposes an `Action` (e.g., `RESTART_SERVICE`).
-2. **Approval**: User approves the action via the Dashboard or notification link.
-3. **Execution**: Agent polls `/api/actions/pending`, receives the command, and executes it.
-4. **Reporting**: Agent reports the result (success/failure + logs) to `/api/actions/{id}/result`.
-5. **AI Follow-up**: The AI analyzes the reported result to confirm resolution or suggest next steps.
+```routeros
+/tool fetch url="https://wigo.example.com:8443/api/actions/telemetry" \
+    http-method=post \
+    http-header-field="Authorization: Bearer YOUR_TOKEN_HERE,Content-Type: application/json" \
+    http-data="..."
+```
 
-## 5. Remote Proxy Agents (Docker)
-For devices like MikroTik that cannot run Python scripts:
-1. Ensure the Controller has access to `/var/run/docker.sock`.
-2. The Orchestrator spins up proxy containers based on the `wigo-proxy-mikrotik` image.
-3. These containers handle the mTLS communication and poll the hardware via SSH.
+## 5. Security Note
+- Always use HTTPS for the agent API to protect the `registration_token` and telemetry data.
+- Tokens can be revoked by deleting the agent or regenerating the token in the database.

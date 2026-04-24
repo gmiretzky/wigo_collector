@@ -6,16 +6,35 @@ from src.wigo.ai.brain import get_brain
 import uuid
 import datetime
 
+import hmac
+import hashlib
+import time
+
 router = APIRouter()
 
 class TelemetryBurst(BaseModel):
     hostname: str
     data: str
+    timestamp: int
+    hmac_signature: str
 
 class ActionResult(BaseModel):
     stdout: str
     stderr: str
     exit_code: int
+    timestamp: int
+    hmac_signature: str
+
+def verify_agent_hmac(agent: Agent, msg_parts: list, signature: str) -> bool:
+    if not agent.registration_token:
+        return False
+    msg = "".join(str(p) for p in msg_parts)
+    expected = hmac.new(agent.registration_token.encode(), msg.encode(), hashlib.sha256).hexdigest()
+    return hmac.compare_digest(expected, signature)
+
+def check_timestamp(ts: int):
+    if abs(int(time.time()) - ts) > 300:
+        raise HTTPException(status_code=403, detail="Request expired")
 
 @router.post("/actions/telemetry")
 async def receive_telemetry(burst: TelemetryBurst, db: Session = Depends(get_db)):
@@ -23,6 +42,11 @@ async def receive_telemetry(burst: TelemetryBurst, db: Session = Depends(get_db)
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not registered")
     
+    # Validate HMAC
+    check_timestamp(burst.timestamp)
+    if not verify_agent_hmac(agent, [burst.hostname, burst.timestamp], burst.hmac_signature):
+        raise HTTPException(status_code=403, detail="Invalid HMAC signature")
+
     # Process with AI
     brain = get_brain()
     proposal = await brain.process_telemetry(agent.id, burst.data)
@@ -40,8 +64,6 @@ async def receive_telemetry(burst: TelemetryBurst, db: Session = Depends(get_db)
         db.commit()
         db.refresh(new_action)
         
-        # Trigger Notification (Placeholder - in real world would call Pushover/HA)
-        # For now, we return the action ID so the user can approve via REST
         return {
             "status": "action_proposed",
             "action_id": new_action.id,
@@ -73,7 +95,7 @@ def reject_action(action_id: int, token: str, db: Session = Depends(get_db)):
     return {"status": "rejected"}
 
 @router.get("/actions/pending")
-def get_pending_actions(hostname: str, db: Session = Depends(get_db)):
+def get_pending_actions(hostname: str, timestamp: int, hmac_signature: str, db: Session = Depends(get_db)):
     """
     Endpoint for agents to poll for instructions.
     """
@@ -81,19 +103,22 @@ def get_pending_actions(hostname: str, db: Session = Depends(get_db)):
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not registered")
     
+    # Validate HMAC
+    check_timestamp(timestamp)
+    if not verify_agent_hmac(agent, [hostname, timestamp], hmac_signature):
+        raise HTTPException(status_code=403, detail="Invalid HMAC signature")
+
     pending = db.query(Action).filter(
         Action.agent_id == agent.id, 
         Action.status == ActionStatus.APPROVED
     ).all()
     
-    # Format and mark as executed (or wait for agent to confirm execution)
     commands = []
     for action in pending:
         commands.append({
             "id": action.id,
             "command": action.command
         })
-        # For now, auto-mark as executed when polled
         action.status = ActionStatus.EXECUTED
         action.executed_at = datetime.datetime.utcnow()
     
@@ -106,13 +131,18 @@ async def receive_action_result(action_id: int, result: ActionResult, db: Sessio
     if not action:
         raise HTTPException(status_code=404, detail="Action not found")
     
+    agent = action.agent
+    # Validate HMAC
+    check_timestamp(result.timestamp)
+    if not verify_agent_hmac(agent, [action_id, result.timestamp], result.hmac_signature):
+        raise HTTPException(status_code=403, detail="Invalid HMAC signature")
+
     action.result_stdout = result.stdout
     action.result_stderr = result.stderr
     action.exit_code = result.exit_code
     action.status = ActionStatus.EXECUTED if result.exit_code == 0 else ActionStatus.FAILED
     action.executed_at = datetime.datetime.utcnow()
     
-    # Process result with AI for analysis
     brain = get_brain()
     analysis = await brain.analyze_result(action.command, result.stdout, result.stderr, result.exit_code)
     action.ai_analysis = analysis

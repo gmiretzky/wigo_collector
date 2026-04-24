@@ -5,6 +5,10 @@ from src.wigo.database import get_db, Agent, AgentStatus
 from src.wigo.pki import pki
 import datetime
 
+import hmac
+import hashlib
+import time
+
 router = APIRouter()
 
 class RegistrationRequest(BaseModel):
@@ -15,16 +19,20 @@ class RegistrationRequest(BaseModel):
     module: str
     software_version: str
     registration_token: str
-    csr: str  # PEM formatted CSR
+    timestamp: int
+    hmac_signature: str
 
 class RegistrationResponse(BaseModel):
-    certificate: str
-    ca_cert: str
     status: str
+    message: str
+
+def verify_hmac(key: str, message: str, signature: str) -> bool:
+    expected = hmac.new(key.encode(), message.encode(), hashlib.sha256).hexdigest()
+    return hmac.compare_digest(expected, signature)
 
 @router.post("/register", response_model=RegistrationResponse)
 def register_agent(req: RegistrationRequest, db: Session = Depends(get_db)):
-    # Check if agent is pre-registered with this token
+    # 1. Check if agent is pre-registered with this token
     agent = db.query(Agent).filter(
         Agent.hostname == req.hostname,
         Agent.ip_address == req.ip_address,
@@ -35,27 +43,27 @@ def register_agent(req: RegistrationRequest, db: Session = Depends(get_db)):
     if not agent:
         raise HTTPException(status_code=403, detail="Invalid registration token or agent not pre-registered")
     
-    try:
-        cert_pem, serial = pki.sign_agent_csr(req.csr, req.hostname)
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Failed to sign certificate: {str(e)}")
+    # 2. Verify HMAC signature
+    # Message format: hostname + ip_address + timestamp
+    msg = f"{req.hostname}{req.ip_address}{req.timestamp}"
+    if not verify_hmac(req.registration_token, msg, req.hmac_signature):
+        raise HTTPException(status_code=403, detail="Invalid HMAC signature")
+    
+    # 3. Check timestamp freshness (optional but recommended, e.g., 5 min window)
+    now = int(time.time())
+    if abs(now - req.timestamp) > 300:
+         raise HTTPException(status_code=403, detail="Request expired (timestamp mismatch)")
 
+    # 4. Update Agent status
     agent.brand = req.brand
     agent.module = req.module
     agent.software_version = req.software_version
-    agent.cert_serial = str(serial)
     agent.last_checkin = datetime.datetime.utcnow()
     agent.status = AgentStatus.ACTIVE
-    # We clear the token after successful registration if we want it to be one-time
-    # agent.registration_token = None 
     
     db.commit()
 
-    with open(pki.ca_cert_path, "r") as f:
-        ca_cert = f.read()
-
     return RegistrationResponse(
-        certificate=cert_pem,
-        ca_cert=ca_cert,
-        status="registered"
+        status="registered",
+        message="Agent successfully registered via HMAC authentication"
     )

@@ -509,6 +509,26 @@
             alert('Settings saved!');
         };
 
+        document.getElementById('cert-upload-form').onsubmit = async (e) => {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            try {
+                const res = await fetch('/api/config/certs/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+                const result = await res.json();
+                if (res.ok) {
+                    alert('Certificates uploaded successfully! Restarting agent interface...');
+                    // Optional: poll health until back up
+                } else {
+                    alert('Upload failed: ' + (result.detail || 'Unknown error'));
+                }
+            } catch (err) {
+                alert('Upload error: ' + err.message);
+            }
+        };
+
         // UI Helpers
         async function approveAction(id, token) {
             await fetch(`/api/actions/${id}/approve?token=${token}`, { method: 'POST' });
