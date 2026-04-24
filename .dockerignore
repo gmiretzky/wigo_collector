@@ -1,0 +1,7 @@
+wigo.db
+certs/
+logs/
+__pycache__/
+*.pyc
+.git
+.env

@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
-from src.wigo.database import get_db, Agent, Action, ActionStatus
+from src.wigo.database import get_db, Agent, Action, ActionStatus, ChatMessage
 from src.wigo.ai.brain import get_brain
 import uuid
 import datetime
@@ -94,6 +94,9 @@ def reject_action(action_id: int, token: str, db: Session = Depends(get_db)):
     db.commit()
     return {"status": "rejected"}
 
+from src.wigo.utils.logging import log_c2
+import json
+
 @router.get("/actions/pending")
 def get_pending_actions(hostname: str, timestamp: int, hmac_signature: str, db: Session = Depends(get_db)):
     """
@@ -106,6 +109,7 @@ def get_pending_actions(hostname: str, timestamp: int, hmac_signature: str, db: 
     # Validate HMAC
     check_timestamp(timestamp)
     if not verify_agent_hmac(agent, [hostname, timestamp], hmac_signature):
+        log_c2("WARNING", None, f"Auth Failure: Invalid HMAC from {hostname}")
         raise HTTPException(status_code=403, detail="Invalid HMAC signature")
 
     pending = db.query(Action).filter(
@@ -115,37 +119,81 @@ def get_pending_actions(hostname: str, timestamp: int, hmac_signature: str, db: 
     
     commands = []
     for action in pending:
+        trace_id = action.trace_id or str(uuid.uuid4())
+        action.trace_id = trace_id # Backfill if missing
+        
+        log_c2("INFO", trace_id, f"Dispatching Action {action.id} ({action.command}) to {hostname}")
+        
         commands.append({
             "id": action.id,
-            "command": action.command
+            "command": action.command,
+            "trace_id": trace_id
         })
-        action.status = ActionStatus.EXECUTED
+        action.status = ActionStatus.DISPATCHED
         action.executed_at = datetime.datetime.utcnow()
     
     db.commit()
     return {"commands": commands}
 
+from fastapi import BackgroundTasks
+
+async def run_ai_analysis(action_id: int, command: str, stdout: str, stderr: str, exit_code: int):
+    # This runs in the background
+    from src.wigo.database import SessionLocal
+    db = SessionLocal()
+    try:
+        brain = get_brain()
+        analysis = await brain.analyze_result(command, stdout, stderr, exit_code)
+        
+        action = db.query(Action).filter(Action.id == action_id).first()
+        if action:
+            action.ai_analysis = analysis
+            db.commit()
+    finally:
+        db.close()
+
 @router.post("/actions/{action_id}/result")
-async def receive_action_result(action_id: int, result: ActionResult, db: Session = Depends(get_db)):
+async def receive_action_result(action_id: int, result: ActionResult, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     action = db.query(Action).filter(Action.id == action_id).first()
     if not action:
         raise HTTPException(status_code=404, detail="Action not found")
     
     agent = action.agent
+    trace_id = action.trace_id
+    
     # Validate HMAC
     check_timestamp(result.timestamp)
     if not verify_agent_hmac(agent, [action_id, result.timestamp], result.hmac_signature):
+        log_c2("WARNING", trace_id, f"Result Auth Failure: Invalid HMAC for Action {action_id}")
         raise HTTPException(status_code=403, detail="Invalid HMAC signature")
 
+    log_c2("DEBUG", trace_id, f"Received Result for {action_id}: exit={result.exit_code}")
+    
     action.result_stdout = result.stdout
     action.result_stderr = result.stderr
     action.exit_code = result.exit_code
     action.status = ActionStatus.EXECUTED if result.exit_code == 0 else ActionStatus.FAILED
     action.executed_at = datetime.datetime.utcnow()
     
-    brain = get_brain()
-    analysis = await brain.analyze_result(action.command, result.stdout, result.stderr, result.exit_code)
-    action.ai_analysis = analysis
+    # If this was a chat command, post the result back to chat as the 'agent'
+    if action.trace_id:
+        chat_msg = ChatMessage(
+            agent_id=agent.id,
+            content=f"Result: {result.stdout[:500]}{'...' if len(result.stdout) > 500 else ''}",
+            sender="agent",
+            trace_id=trace_id
+        )
+        db.add(chat_msg)
+
+    # Queue AI Analysis in background
+    background_tasks.add_task(
+        run_ai_analysis, 
+        action.id, 
+        action.command, 
+        result.stdout, 
+        result.stderr, 
+        result.exit_code
+    )
     
     db.commit()
     return {"status": "ok"}

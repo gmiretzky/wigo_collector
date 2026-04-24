@@ -16,6 +16,7 @@ class ActionStatus(enum.Enum):
     PENDING = "pending"
     APPROVED = "approved"
     REJECTED = "rejected"
+    DISPATCHED = "dispatched"
     EXECUTED = "executed"
     FAILED = "failed"
 
@@ -54,6 +55,7 @@ class Action(Base):
     result_stderr = Column(String, nullable=True)
     exit_code = Column(Integer, nullable=True)
     ai_analysis = Column(String, nullable=True)
+    trace_id = Column(String, index=True, nullable=True)
 
     agent = relationship("Agent", back_populates="actions")
 
@@ -73,6 +75,7 @@ class ChatMessage(Base):
     content = Column(String)
     timestamp = Column(DateTime, default=datetime.datetime.utcnow)
     external_source = Column(String, nullable=True) # 'telegram', 'whatsapp', etc.
+    trace_id = Column(String, index=True, nullable=True)
 
     agent = relationship("Agent")
 

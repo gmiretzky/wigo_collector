@@ -24,22 +24,43 @@ class MessageSchema(BaseModel):
     class Config:
         orm_mode = True
 
+import uuid
+from src.wigo.database import get_db, ChatMessage, Agent, Action, ActionStatus
+from src.wigo.utils.logging import log_c2
+
 @router.post("/chat/send", response_model=MessageSchema)
 def send_message(msg: MessageCreate, db: Session = Depends(get_db)):
     """
     Send a message from the management interface or remote source to an agent.
+    If the sender is 'user', automatically create an Action for the agent to poll.
     """
     agent = db.query(Agent).filter(Agent.id == msg.agent_id).first()
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not found")
     
+    trace_id = str(uuid.uuid4())
+    
     db_msg = ChatMessage(
         agent_id=msg.agent_id,
         content=msg.content,
         sender=msg.sender,
-        external_source=msg.external_source
+        external_source=msg.external_source,
+        trace_id=trace_id
     )
     db.add(db_msg)
+    
+    # Bridge to Action Queue
+    if msg.sender == "user":
+        new_action = Action(
+            agent_id=agent.id,
+            command=msg.content, # Use content as command
+            rationale=f"Chat command from {msg.sender}",
+            status=ActionStatus.APPROVED, # Pre-approved for chat
+            trace_id=trace_id
+        )
+        db.add(new_action)
+        log_c2("INFO", trace_id, f"Created Action {new_action.id} from Chat for Agent {agent.hostname}")
+    
     db.commit()
     db.refresh(db_msg)
     return db_msg

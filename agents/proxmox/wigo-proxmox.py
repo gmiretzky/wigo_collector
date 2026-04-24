@@ -115,6 +115,8 @@ class WigoProxmoxAgent:
                 if resp.status_code == 200:
                     commands = resp.json().get('commands', [])
                     for cmd in commands:
+                        tid = cmd.get('trace_id', 'UNKNOWN')
+                        logger.info(f"Received action {cmd['id']} [Trace: {tid}]: {cmd['command']}")
                         await self.execute_action(cmd)
                 else:
                     logger.warning(f"Polling failed: {resp.status_code}")
