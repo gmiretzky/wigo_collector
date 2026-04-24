@@ -46,7 +46,12 @@ class Action(Base):
     agent_id = Column(Integer, ForeignKey("agents.id"))
     command = Column(String)
     rationale = Column(String)
+    ai_reasoning = Column(String, nullable=True)
     status = Column(Enum(ActionStatus), default=ActionStatus.PENDING)
+    permission_level = Column(Integer, default=2)
+    iteration_count = Column(Integer, default=0)
+    parent_action_id = Column(Integer, ForeignKey("actions.id"), nullable=True)
+    
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     executed_at = Column(DateTime, nullable=True)
     approval_token = Column(String)  # For REST callback validation

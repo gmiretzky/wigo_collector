@@ -52,24 +52,36 @@ async def receive_telemetry(burst: TelemetryBurst, db: Session = Depends(get_db)
     proposal = await brain.process_telemetry(agent.id, burst.data)
     
     if proposal.get("issue_detected"):
-        # Create a pending action
+        trace_id = str(uuid.uuid4())
+        command = proposal.get("proposed_command")
+        perm_level = get_permission_level(agent.brand, command)
+        
+        # Create action
         new_action = Action(
             agent_id=agent.id,
-            command=proposal.get("proposed_command"),
+            command=command,
             rationale=proposal.get("rationale"),
-            status=ActionStatus.PENDING,
-            approval_token=str(uuid.uuid4())
+            ai_reasoning=proposal.get("reasoning", "Auto-detected from telemetry"),
+            status=ActionStatus.APPROVED if perm_level == 1 else ActionStatus.PENDING,
+            permission_level=perm_level,
+            trace_id=trace_id,
+            approval_token=str(uuid.uuid4()) if perm_level == 2 else None
         )
         db.add(new_action)
+        
+        # Log to audit
+        log_audit("Telemetry Burst", proposal.get("reasoning", "N/A"), agent.hostname, command)
+        log_c2("INFO", trace_id, f"Telemetry -> Action {command} for {agent.hostname} (Level {perm_level})")
+        
         db.commit()
         db.refresh(new_action)
         
         return {
-            "status": "action_proposed",
+            "status": "action_proposed" if perm_level == 2 else "action_auto_approved",
             "action_id": new_action.id,
             "rationale": new_action.rationale,
             "command": new_action.command,
-            "approval_url": f"/api/actions/{new_action.id}/approve?token={new_action.approval_token}"
+            "approval_url": f"/api/actions/{new_action.id}/approve?token={new_action.approval_token}" if perm_level == 2 else None
         }
     
     return {"status": "ok", "message": "No action required"}
@@ -137,18 +149,60 @@ def get_pending_actions(hostname: str, timestamp: int, hmac_signature: str, db: 
 
 from fastapi import BackgroundTasks
 
+from src.wigo.config import get_permission_level
+from src.wigo.utils.logging import log_audit
+
 async def run_ai_analysis(action_id: int, command: str, stdout: str, stderr: str, exit_code: int):
     # This runs in the background
-    from src.wigo.database import SessionLocal
+    from src.wigo.database import SessionLocal, Action, ActionStatus, Agent
     db = SessionLocal()
     try:
         brain = get_brain()
+        
+        # 1. Human-readable analysis for the UI
         analysis = await brain.analyze_result(command, stdout, stderr, exit_code)
         
-        action = db.query(Action).filter(Action.id == action_id).first()
-        if action:
-            action.ai_analysis = analysis
+        action.ai_analysis = analysis
+        db.commit()
+
+        # 1.5 Post analysis to chat
+        if action.trace_id:
+            chat_msg = ChatMessage(
+                agent_id=action.agent_id,
+                content=f"AI Analysis: {analysis}",
+                sender="ai",
+                trace_id=action.trace_id
+            )
+            db.add(chat_msg)
             db.commit()
+
+        # 2. Recursive Feedback Loop (Max 3 iterations)
+        if action.iteration_count < 3:
+            follow_up = await brain.decide_follow_up(command, stdout + stderr, action.iteration_count + 1)
+            
+            if follow_up:
+                command_str = follow_up['parameters']
+                perm_level = get_permission_level(action.agent.brand, command_str)
+                
+                new_action = Action(
+                    agent_id=action.agent_id,
+                    command=command_str,
+                    rationale=follow_up['rationale'],
+                    ai_reasoning=follow_up['reasoning'],
+                    status=ActionStatus.APPROVED if perm_level == 1 else ActionStatus.PENDING,
+                    permission_level=perm_level,
+                    iteration_count=action.iteration_count + 1,
+                    parent_action_id=action.id,
+                    trace_id=action.trace_id,
+                    approval_token=str(uuid.uuid4()) if perm_level == 2 else None
+                )
+                db.add(new_action)
+                
+                # Log to audit
+                log_audit(f"Follow-up to {action.command}", follow_up['reasoning'], action.agent.hostname, follow_up['parameters'])
+                log_c2("INFO", action.trace_id, f"Follow-up Action {new_action.command} (Iteration {new_action.iteration_count})")
+                
+                db.commit()
     finally:
         db.close()
 
@@ -177,9 +231,13 @@ async def receive_action_result(action_id: int, result: ActionResult, background
     
     # If this was a chat command, post the result back to chat as the 'agent'
     if action.trace_id:
+        output = result.stdout if result.stdout.strip() else result.stderr
+        if not output.strip():
+            output = f"[No Output, Exit Code: {result.exit_code}]"
+            
         chat_msg = ChatMessage(
             agent_id=agent.id,
-            content=f"Result: {result.stdout[:500]}{'...' if len(result.stdout) > 500 else ''}",
+            content=f"Result: {output[:500]}{'...' if len(output) > 500 else ''}",
             sender="agent",
             trace_id=trace_id
         )

@@ -1,0 +1,9 @@
+# Proxmox Safe Commands
+uptime: 1
+"qm list": 1
+"pct list": 1
+"pvesm status": 1
+"qm start": 2
+"qm stop": 2
+"pct start": 2
+"pct stop": 2

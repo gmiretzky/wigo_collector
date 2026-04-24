@@ -1,0 +1,13 @@
+# Ubuntu Safe Commands
+uptime: 1
+ls: 1
+ip_addr: 1
+ps: 1
+df: 1
+cat: 1
+ping: 1
+reboot: 2
+restart_service: 2
+block_ip: 2
+unblock_ip: 2
+update_config: 2

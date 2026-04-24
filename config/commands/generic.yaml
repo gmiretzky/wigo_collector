@@ -1,0 +1,5 @@
+# Generic Fallback Commands
+uptime: 1
+echo: 1
+ping: 1
+date: 1

@@ -1,0 +1,6 @@
+# MikroTik Safe Commands
+"/system resource print": 1
+"/ip address print": 1
+"/interface print": 1
+"/system reboot": 2
+"/ip firewall filter add": 2

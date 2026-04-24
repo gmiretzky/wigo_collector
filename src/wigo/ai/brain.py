@@ -16,6 +16,27 @@ class AIProvider(ABC):
         """
         pass
 
+    @abstractmethod
+    async def intent_to_actions(self, user_text: str, agents: List[dict]) -> List[dict]:
+        """
+        Translate global user text into a list of actions for specific agents.
+        """
+        pass
+
+    @abstractmethod
+    async def decide_follow_up(self, command: str, result: str, iteration: int) -> Optional[dict]:
+        """
+        Decide if a follow-up action is needed based on command output.
+        """
+        pass
+
+    @abstractmethod
+    def is_available(self) -> bool:
+        """
+        Check if the AI service is configured and reachable.
+        """
+        pass
+
 class Brain:
     def __init__(self, provider: AIProvider):
         self.provider = provider
@@ -28,11 +49,16 @@ class Brain:
         return proposal
 
     async def analyze_result(self, command: str, stdout: str, stderr: str, exit_code: int):
-        """
-        Analyze the output of an executed command.
-        """
-        analysis = await self.provider.analyze_result(command, stdout, stderr, exit_code)
-        return analysis
+        return await self.provider.analyze_result(command, stdout, stderr, exit_code)
+
+    async def intent_to_actions(self, user_text: str, agents: List[dict]):
+        return await self.provider.intent_to_actions(user_text, agents)
+
+    async def decide_follow_up(self, command: str, result: str, iteration: int):
+        return await self.provider.decide_follow_up(command, result, iteration)
+
+    def is_available(self) -> bool:
+        return self.provider.is_available()
 
 # Global brain instance (will be configured via settings)
 _brain: Optional[Brain] = None

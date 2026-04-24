@@ -17,6 +17,14 @@ stream_handler = logging.StreamHandler()
 stream_handler.setFormatter(logging.Formatter('%(asctime)s [%(levelname)s] %(message)s'))
 logger.addHandler(stream_handler)
 
+# Centralized C2 Audit Log (for human-readable trails)
+AUDIT_FILE = "logs/c2_audit.log"
+audit_logger = logging.getLogger("wigo_audit")
+audit_logger.setLevel(logging.INFO)
+audit_handler = logging.FileHandler(AUDIT_FILE)
+audit_handler.setFormatter(logging.Formatter('%(asctime)s [%(levelname)s] %(message)s'))
+audit_logger.addHandler(audit_handler)
+
 def log_c2(level, trace_id, message):
     extra = {'trace_id': trace_id or 'SYSTEM'}
     if level == "INFO":
@@ -27,3 +35,10 @@ def log_c2(level, trace_id, message):
         logger.error(message, extra=extra)
     elif level == "WARNING":
         logger.warning(message, extra=extra)
+
+def log_audit(user_text, reasoning, agent_name, command):
+    """
+    Log AI-generated commands with context.
+    """
+    msg = f"User: {user_text} | Reasoning: {reasoning} | Agent: {agent_name} | Action: {command}"
+    audit_logger.info(msg)

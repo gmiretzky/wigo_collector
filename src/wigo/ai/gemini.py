@@ -2,13 +2,30 @@ import os
 import json
 import google.generativeai as genai
 from src.wigo.ai.brain import AIProvider
+from typing import Optional
 
 class GeminiProvider(AIProvider):
     def __init__(self):
-        api_key = os.getenv("GEMINI_API_KEY")
-        if api_key:
-            genai.configure(api_key=api_key)
+        self.api_key = os.getenv("GEMINI_API_KEY")
+        if self.api_key:
+            genai.configure(api_key=self.api_key)
+        else:
+            print("[!] WARNING: GEMINI_API_KEY is not set. AI features will fail.")
         self.model = genai.GenerativeModel('gemini-1.5-flash')
+
+    async def _generate(self, prompt: str) -> str:
+        if not self.api_key:
+            print("[!] AI ERROR: Attempted to generate content without GEMINI_API_KEY")
+            raise Exception("GEMINI_API_KEY missing")
+        
+        print(f"\n--- AI PROMPT ---\n{prompt}\n-----------------")
+        try:
+            response = self.model.generate_content(prompt)
+            print(f"\n--- AI RESPONSE ---\n{response.text}\n-------------------")
+            return response.text.strip()
+        except Exception as e:
+            print(f"[!] AI ERROR: {str(e)}")
+            raise e
 
     async def analyze(self, data: str) -> dict:
         prompt = f"""
@@ -17,6 +34,7 @@ class GeminiProvider(AIProvider):
         Respond ONLY with a JSON object in this format:
         {{
             "issue_detected": true/false,
+            "reasoning": "Internal AI thought process",
             "rationale": "Description of why this action is needed",
             "proposed_command": "The actual command to run (e.g., RESTART_SERVICE, BLOCK_IP 1.2.3.4)",
             "severity": "LOW/MEDIUM/HIGH"
@@ -25,22 +43,15 @@ class GeminiProvider(AIProvider):
         Telemetry:
         {data}
         """
-        
         try:
-            response = self.model.generate_content(prompt)
-            # Clean up response text in case it has markdown code blocks
-            text = response.text.strip()
+            text = await self._generate(prompt)
             if text.startswith("```json"):
                 text = text[7:-3]
             elif text.startswith("```"):
                 text = text[3:-3]
-            
             return json.loads(text)
         except Exception as e:
-            return {
-                "issue_detected": False,
-                "error": str(e)
-            }
+            return {"issue_detected": False, "error": str(e)}
 
     async def analyze_result(self, command: str, stdout: str, stderr: str, exit_code: int) -> str:
         prompt = f"""
@@ -53,7 +64,82 @@ class GeminiProvider(AIProvider):
         Provide a concise analysis of whether the action was successful and what the current status is.
         """
         try:
-            response = self.model.generate_content(prompt)
-            return response.text.strip()
+            return await self._generate(prompt)
         except Exception as e:
             return f"Error during analysis: {str(e)}"
+
+    async def intent_to_actions(self, user_text: str, agents: list[dict]) -> list[dict]:
+        agents_str = json.dumps(agents, indent=2)
+        prompt = f"""
+        You are the WIGO C2 Intent-to-Action Engine.
+        The user has sent a request: "{user_text}"
+        
+        Available Agents:
+        {agents_str}
+        
+        Task:
+        1. Determine which agent(s) should take action.
+        2. Propose a list of actions (commands) to achieve the user's intent.
+           - For Ubuntu agents: Use standard Linux bash commands (e.g., ls, ps, df, systemctl).
+           - For Proxmox agents: Use Proxmox CLI tools (e.g., qm list, pct list, pvesh, pvecm).
+           - For MikroTik agents: Use RouterOS CLI syntax (e.g., "/interface print", "/ip address print").
+        3. For each action, provide a reasoning and a rationale.
+        
+        Respond ONLY with a JSON list of objects in this format:
+        [
+          {{
+            "agent_hostname": "hostname",
+            "verb": "command_verb",
+            "parameters": "full command string to be executed",
+            "reasoning": "Internal AI thought process",
+            "rationale": "Human-readable explanation for the user"
+          }}
+        ]
+        
+        If no action is needed, return an empty list [].
+        """
+        try:
+            text = await self._generate(prompt)
+            if text.startswith("```json"):
+                text = text[7:-3]
+            elif text.startswith("```"):
+                text = text[3:-3]
+            return json.loads(text)
+        except Exception:
+            return []
+
+    def is_available(self) -> bool:
+        return self.api_key is not None and len(self.api_key) > 0
+
+    async def decide_follow_up(self, command: str, result: str, iteration: int) -> Optional[dict]:
+        if iteration >= 3:
+            return None
+            
+        prompt = f"""
+        You are analyzing the result of a command.
+        Command: {command}
+        Result: {result}
+        Current Iteration: {iteration}/3
+        
+        Decide if a follow-up action is needed. 
+        If yes, respond ONLY with a JSON object:
+        {{
+            "verb": "command_verb",
+            "parameters": "full command",
+            "reasoning": "Why this follow-up is needed",
+            "rationale": "Human-readable explanation"
+        }}
+        
+        If no follow-up is needed, respond with "NONE".
+        """
+        try:
+            text = await self._generate(prompt)
+            if text == "NONE":
+                return None
+            if text.startswith("```json"):
+                text = text[7:-3]
+            elif text.startswith("```"):
+                text = text[3:-3]
+            return json.loads(text)
+        except Exception:
+            return None

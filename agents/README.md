@@ -22,5 +22,25 @@ Each agent subdirectory (e.g., `agents/proxmox/`) should include:
 3.  **Registration Loop:** The agent should support an initial registration phase using the token provided by the Controller dashboard.
 4.  **Service Integration:** Ensure the agent restarts automatically on boot.
 
+## Command Execution Requirements
+Agents must implement a polling loop (default 60s) to fetch pending actions from `/api/actions/pending`.
+When executing a command:
+- **stdout/stderr:** Must be captured and reported back to `/api/actions/{id}/result`.
+- **Exit Codes:** Non-zero exit codes should be reported correctly to allow AI error analysis.
+- **Traceability:** Agents must include the `trace_id` provided by the controller in all related log entries.
+
+## Command Whitelisting
+The WIGO Controller enforces security via brand-specific command whitelists. 
+When building a new agent:
+1.  **Define Safe Commands:** Identify which commands are "Read-only" (Level 1) and which are "State-changing" (Level 2).
+2.  **Submit Config:** Provide a `<brand>.yaml` file to be placed in the controller's `config/commands/` directory.
+    - Example `ubuntu.yaml`:
+      ```yaml
+      uptime: 1
+      df: 1
+      reboot: 2
+      ```
+3.  **Default Behavior:** If no brand-specific config exists, the controller falls back to `generic.yaml` (minimal commands) and defaults unknown commands to Level 2 (Requires Approval).
+
 ## Documentation
-Each agent folder should contain its own `README.md` explaining platform-specific installation steps (e.g., RouterOS commands for MikroTik).
+Each agent folder should contain its own `README.md` explaining platform-specific installation steps and a list of recommended `SAFE_COMMANDS` for the controller.

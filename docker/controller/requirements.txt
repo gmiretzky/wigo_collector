@@ -8,3 +8,4 @@ google-generativeai
 docker
 python-multipart
 jinja2
+pyyaml
