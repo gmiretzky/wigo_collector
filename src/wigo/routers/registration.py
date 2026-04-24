@@ -33,9 +33,8 @@ def verify_hmac(key: str, message: str, signature: str) -> bool:
 @router.post("/register", response_model=RegistrationResponse)
 def register_agent(req: RegistrationRequest, db: Session = Depends(get_db)):
     # 1. Check if agent is pre-registered with this token
+    # We only filter by token and status to be more robust to hostname/IP differences
     agent = db.query(Agent).filter(
-        Agent.hostname == req.hostname,
-        Agent.ip_address == req.ip_address,
         Agent.registration_token == req.registration_token,
         Agent.status == AgentStatus.PENDING
     ).first()
@@ -54,7 +53,9 @@ def register_agent(req: RegistrationRequest, db: Session = Depends(get_db)):
     if abs(now - req.timestamp) > 300:
          raise HTTPException(status_code=403, detail="Request expired (timestamp mismatch)")
 
-    # 4. Update Agent status
+    # 4. Update Agent status and info
+    agent.hostname = req.hostname
+    agent.ip_address = req.ip_address
     agent.brand = req.brand
     agent.module = req.module
     agent.software_version = req.software_version
