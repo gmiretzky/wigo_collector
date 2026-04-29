@@ -77,17 +77,17 @@ def get_ai_models(provider: str = "gemini", db: Session = Depends(get_db)):
             client = genai.Client(api_key=api_key)
             supported_models = []
             for m in client.models.list():
-                # The new SDK model object properties: name, display_name, supported_generation_methods
-                methods = getattr(m, 'supported_generation_methods', [])
-                if "generateContent" in methods:
+                model_id = m.name.replace("models/", "") if m.name.startswith("models/") else m.name
+                
+                # Exclude embedding and AQA models
+                if "gemini" in model_id.lower() and "embedding" not in model_id.lower():
                     supported_models.append({
-                        "id": m.name.replace("models/", "") if m.name.startswith("models/") else m.name,
+                        "id": model_id,
                         "name": getattr(m, 'display_name', m.name)
                     })
                     
-            # Filter to relevant gemini models and return top 5
-            gemini_models = [m for m in supported_models if "gemini" in m["id"].lower()]
-            return gemini_models[:5] if gemini_models else supported_models[:5]
+            # Return top 15 models to give a good selection
+            return supported_models[:15]
         except Exception as e:
             return [{"id": "gemini-1.5-pro-latest", "name": f"API Error: {str(e)}"}]
             
