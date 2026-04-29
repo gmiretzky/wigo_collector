@@ -1,11 +1,70 @@
 #!/bin/bash
 
-# WIGO Proxmox Agent Installation Script
+# WIGO Proxmox Agent Installation & Update Script
 # Must be run as root on a Proxmox VE host
 
 set -e
 
-echo "Starting WIGO Proxmox Agent Installation..."
+if [ -z "$1" ]; then
+    echo "Usage: $0 <git_repo_url>"
+    echo "Example: $0 https://github.com/gmiretzky/wigo_collector.git"
+    exit 1
+fi
+
+GIT_REPO="$1"
+AGENT_NAME="proxmox"
+SERVICE_NAME="wigo-proxmox.service"
+LOCAL_VERSION_FILE="/etc/wigo/version.txt"
+
+echo "Starting WIGO Proxmox Agent Installation/Update..."
+
+if ! command -v git &> /dev/null; then
+    echo "Git is not installed. Installing git..."
+    apt-get update || true
+    apt-get install -y git
+fi
+
+# Check if agent is already running/installed
+if systemctl list-unit-files | grep -q "^${SERVICE_NAME}"; then
+    echo "Agent service is already installed. Checking for updates..."
+    LOCAL_VERSION=$(cat $LOCAL_VERSION_FILE 2>/dev/null || echo "0.0")
+    
+    TEMP_DIR=$(mktemp -d)
+    echo "Pulling latest version from Git..."
+    git clone --depth 1 "$GIT_REPO" "$TEMP_DIR" > /dev/null 2>&1
+    
+    REMOTE_VERSION=$(cat "$TEMP_DIR/agents/$AGENT_NAME/version.txt" 2>/dev/null || echo "0.0")
+    
+    if [ "$LOCAL_VERSION" != "$REMOTE_VERSION" ]; then
+        echo "New version found (Local: $LOCAL_VERSION, Remote: $REMOTE_VERSION). Updating..."
+        systemctl stop "$SERVICE_NAME"
+        
+        # Copy updated files
+        cp "$TEMP_DIR/agents/$AGENT_NAME/wigo-proxmox.py" /usr/local/bin/wigo-proxmox.py
+        cp "$TEMP_DIR/agents/$AGENT_NAME/version.txt" "$LOCAL_VERSION_FILE"
+        
+        chown wigo:wigo /usr/local/bin/wigo-proxmox.py
+        chmod +x /usr/local/bin/wigo-proxmox.py
+        
+        # Update python dependencies
+        sudo -u wigo /home/wigo/venv/bin/pip install httpx cryptography pyyaml psutil > /dev/null 2>&1
+        
+        systemctl start "$SERVICE_NAME"
+        echo "Version changed from $LOCAL_VERSION to $REMOTE_VERSION."
+    else
+        echo "Version has not changed (Version: $LOCAL_VERSION). No update needed."
+    fi
+    
+    rm -rf "$TEMP_DIR"
+    exit 0
+fi
+
+echo "New setup. Installing agent..."
+
+# 0. Clone repository
+TEMP_DIR=$(mktemp -d)
+echo "Pulling agent files from Git..."
+git clone --depth 1 "$GIT_REPO" "$TEMP_DIR" > /dev/null 2>&1
 
 # 1. Install Dependencies
 echo "Installing dependencies..."
@@ -43,8 +102,10 @@ chmod 440 /etc/sudoers.d/wigo
 
 # 5. Copy Files
 echo "Copying agent files..."
-cp wigo-proxmox.py /usr/local/bin/wigo-proxmox.py
-cp config.yaml /etc/wigo/config.yaml
+cp "$TEMP_DIR/agents/$AGENT_NAME/wigo-proxmox.py" /usr/local/bin/wigo-proxmox.py
+cp "$TEMP_DIR/agents/$AGENT_NAME/config.yaml" /etc/wigo/config.yaml
+cp "$TEMP_DIR/agents/$AGENT_NAME/version.txt" "$LOCAL_VERSION_FILE"
+
 chown wigo:wigo /usr/local/bin/wigo-proxmox.py
 chown wigo:wigo /etc/wigo/config.yaml
 chmod +x /usr/local/bin/wigo-proxmox.py
@@ -76,8 +137,10 @@ EOF
 systemctl daemon-reload
 systemctl enable wigo-proxmox
 
+rm -rf "$TEMP_DIR"
+
 echo "----------------------------------------------------"
-echo "Installation Complete!"
+echo "Setup completed for new installation."
 echo "Please edit /etc/wigo/config.yaml with your token."
 echo "Then start the service with: systemctl start wigo-proxmox"
 echo "----------------------------------------------------"

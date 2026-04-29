@@ -10,11 +10,12 @@ Each agent subdirectory (e.g., `agents/proxmox/`) should include:
     *   `controller_url`: The URL of the WIGO Controller.
     *   `registration_token`: The token generated during manual registration.
     *   `hostname`: The machine's hostname.
-3.  **setup.sh:** An automated installation script that:
-    *   Checks for dependencies.
-    *   Configures the environment.
-    *   Sets up the agent as a system service (e.g., systemd).
+3.  **setup.sh:** An automated installation and update script that requires the Git repository URL as an argument (e.g., `./setup.sh https://github.com/gmiretzky/wigo_collector.git`). It:
+    *   Checks if the agent is currently running.
+    *   If not running: clones the repository, installs dependencies, configures the environment, and sets up the system service.
+    *   If running: compares the local `version.txt` with the remote repository. If an update is available, it stops the service, applies the updated files, and restarts it. Note: Only public repositories are supported for automated updates currently (no credentials required).
 4.  **uninstall.sh:** A script to cleanly remove the agent and its configuration from the host.
+5.  **version.txt:** A file containing the current version number of the agent (e.g., `1.0.0`). Used by `setup.sh` to determine if an update is necessary.
 
 ## Development Workflow
 1.  **Create Directory:** Create a new folder in `agents/` named after the target OS or platform (e.g., `agents/mikrotik`).
