@@ -58,3 +58,44 @@ def get_ca_cert():
     
     with open(ca_path, "r") as f:
         return {"ca_cert": f.read()}
+
+from google import genai
+
+@router.get("/config/models")
+def get_ai_models(provider: str = "gemini", db: Session = Depends(get_db)):
+    """
+    Fetch dynamically supported models from the AI provider.
+    """
+    if provider == "gemini":
+        db_setting = db.query(Settings).filter(Settings.key == "ai_token").first()
+        api_key = db_setting.value if db_setting else os.getenv("GEMINI_API_KEY")
+        
+        if not api_key:
+            return [{"id": "gemini-1.5-pro-latest", "name": "Gemini 1.5 Pro (API Key Missing)"}]
+            
+        try:
+            client = genai.Client(api_key=api_key)
+            supported_models = []
+            for m in client.models.list():
+                # The new SDK model object properties: name, display_name, supported_generation_methods
+                methods = getattr(m, 'supported_generation_methods', [])
+                if "generateContent" in methods:
+                    supported_models.append({
+                        "id": m.name.replace("models/", "") if m.name.startswith("models/") else m.name,
+                        "name": getattr(m, 'display_name', m.name)
+                    })
+                    
+            # Filter to relevant gemini models and return top 5
+            gemini_models = [m for m in supported_models if "gemini" in m["id"].lower()]
+            return gemini_models[:5] if gemini_models else supported_models[:5]
+        except Exception as e:
+            return [{"id": "gemini-1.5-pro-latest", "name": f"API Error: {str(e)}"}]
+            
+    elif provider == "ollama":
+        return [
+            {"id": "llama3", "name": "Llama 3"},
+            {"id": "mistral", "name": "Mistral"},
+            {"id": "phi3", "name": "Phi-3"}
+        ]
+        
+    return []

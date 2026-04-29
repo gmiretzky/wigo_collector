@@ -1,6 +1,6 @@
 import os
 import json
-import google.generativeai as genai
+from google import genai
 from src.wigo.ai.brain import AIProvider
 from typing import Optional
 
@@ -9,13 +9,12 @@ from src.wigo.database import get_setting
 class GeminiProvider(AIProvider):
     def __init__(self):
         self.api_key = get_setting("ai_token") or os.getenv("GEMINI_API_KEY")
-        if self.api_key:
-            genai.configure(api_key=self.api_key)
-        else:
+        if not self.api_key:
             print("[!] WARNING: GEMINI_API_KEY is not set. AI features will fail.")
+        else:
+            self.client = genai.Client(api_key=self.api_key)
         
-        model_name = get_setting("ai_model", "gemini-1.5-pro-latest")
-        self.model = genai.GenerativeModel(model_name)
+        self.model_name = get_setting("ai_model", "gemini-1.5-pro-latest")
 
     async def _generate(self, prompt: str) -> str:
         if not self.api_key:
@@ -24,7 +23,10 @@ class GeminiProvider(AIProvider):
         
         print(f"\n--- AI PROMPT ---\n{prompt}\n-----------------")
         try:
-            response = self.model.generate_content(prompt)
+            response = self.client.models.generate_content(
+                model=self.model_name,
+                contents=prompt
+            )
             print(f"\n--- AI RESPONSE ---\n{response.text}\n-------------------")
             return response.text.strip()
         except Exception as e:
