@@ -215,6 +215,21 @@
                                     <input type="password" name="ai_token" class="form-control" placeholder="Enter API Key">
                                 </div>
                                 <div class="form-group">
+                                    <label>AI Model</label>
+                                    <select name="ai_model" class="form-control">
+                                        <optgroup label="Google Gemini">
+                                            <option value="gemini-1.5-pro-latest">Gemini 1.5 Pro</option>
+                                            <option value="gemini-1.5-flash-latest">Gemini 1.5 Flash</option>
+                                            <option value="gemini-pro">Gemini Pro 1.0</option>
+                                        </optgroup>
+                                        <optgroup label="Local Ollama">
+                                            <option value="llama3">Llama 3</option>
+                                            <option value="mistral">Mistral</option>
+                                            <option value="phi3">Phi-3</option>
+                                        </optgroup>
+                                    </select>
+                                </div>
+                                <div class="form-group">
                                     <label>Notification Webhook URL</label>
                                     <input type="text" name="notification_url" class="form-control" placeholder="https://...">
                                 </div>
@@ -494,6 +509,7 @@
             const form = document.getElementById('ai-settings-form');
             if (settings.ai_provider) form.elements.ai_provider.value = settings.ai_provider;
             if (settings.ai_token) form.elements.ai_token.value = settings.ai_token;
+            if (settings.ai_model) form.elements.ai_model.value = settings.ai_model;
             if (settings.notification_url) form.elements.notification_url.value = settings.notification_url;
         }
 

@@ -4,14 +4,18 @@ import google.generativeai as genai
 from src.wigo.ai.brain import AIProvider
 from typing import Optional
 
+from src.wigo.database import get_setting
+
 class GeminiProvider(AIProvider):
     def __init__(self):
-        self.api_key = os.getenv("GEMINI_API_KEY")
+        self.api_key = get_setting("ai_token") or os.getenv("GEMINI_API_KEY")
         if self.api_key:
             genai.configure(api_key=self.api_key)
         else:
             print("[!] WARNING: GEMINI_API_KEY is not set. AI features will fail.")
-        self.model = genai.GenerativeModel('gemini-1.5-flash')
+        
+        model_name = get_setting("ai_model", "gemini-1.5-pro-latest")
+        self.model = genai.GenerativeModel(model_name)
 
     async def _generate(self, prompt: str) -> str:
         if not self.api_key:

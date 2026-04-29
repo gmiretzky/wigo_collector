@@ -98,3 +98,13 @@ def get_db():
         yield db
     finally:
         db.close()
+
+def get_setting(key: str, default: str = None) -> str:
+    db = SessionLocal()
+    try:
+        setting = db.query(Settings).filter(Settings.key == key).first()
+        if setting:
+            return setting.value
+        return default
+    finally:
+        db.close()

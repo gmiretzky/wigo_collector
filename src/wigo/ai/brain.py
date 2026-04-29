@@ -60,13 +60,18 @@ class Brain:
     def is_available(self) -> bool:
         return self.provider.is_available()
 
-# Global brain instance (will be configured via settings)
-_brain: Optional[Brain] = None
-
 def get_brain() -> Brain:
-    global _brain
-    if _brain is None:
-        # Default to Gemini for now, but this should be configurable
-        from src.wigo.ai.gemini import GeminiProvider
-        _brain = Brain(GeminiProvider())
-    return _brain
+    # Always read from latest settings
+    from src.wigo.ai.gemini import GeminiProvider
+    from src.wigo.database import get_setting
+
+    provider_name = get_setting("ai_provider", "gemini")
+    
+    if provider_name == "ollama":
+        # Placeholder for OllamaProvider
+        # from src.wigo.ai.ollama import OllamaProvider
+        # return Brain(OllamaProvider())
+        pass
+        
+    # Default to Gemini
+    return Brain(GeminiProvider())

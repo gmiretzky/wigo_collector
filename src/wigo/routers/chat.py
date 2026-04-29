@@ -22,7 +22,7 @@ class MessageSchema(BaseModel):
     external_source: Optional[str]
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 import uuid
 from src.wigo.database import get_db, ChatMessage, Agent, Action, ActionStatus
