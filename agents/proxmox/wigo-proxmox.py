@@ -134,7 +134,7 @@ class WigoProxmoxAgent:
         
         # Host Status
         try:
-            res = subprocess.run(["pvesh", "get", "/nodes/localhost/status", "--output-format", "json"], capture_output=True, text=True)
+            res = subprocess.run(["sudo", "pvesh", "get", "/nodes/localhost/status", "--output-format", "json"], capture_output=True, text=True)
             if res.returncode == 0:
                 metrics['host'] = json.loads(res.stdout)
         except Exception as e:
@@ -142,7 +142,7 @@ class WigoProxmoxAgent:
 
         # QEMU VMs
         try:
-            res = subprocess.run(["pvesh", "get", "/nodes/localhost/qemu", "--output-format", "json"], capture_output=True, text=True)
+            res = subprocess.run(["sudo", "pvesh", "get", "/nodes/localhost/qemu", "--output-format", "json"], capture_output=True, text=True)
             if res.returncode == 0:
                 metrics['vms'] = json.loads(res.stdout)
         except Exception as e:
@@ -150,7 +150,7 @@ class WigoProxmoxAgent:
 
         # LXC Containers
         try:
-            res = subprocess.run(["pvesh", "get", "/nodes/localhost/lxc", "--output-format", "json"], capture_output=True, text=True)
+            res = subprocess.run(["sudo", "pvesh", "get", "/nodes/localhost/lxc", "--output-format", "json"], capture_output=True, text=True)
             if res.returncode == 0:
                 metrics['lxc'] = json.loads(res.stdout)
         except Exception as e:
@@ -220,7 +220,11 @@ class WigoProxmoxAgent:
             final_cmd = f"sudo qm snapshot {vmid} {snap_name}"
         else:
             # Fallback/Unknown
-            final_cmd = raw_command
+            cmd_parts = raw_command.split()
+            if cmd_parts and cmd_parts[0] in ["qm", "pct", "pvesh", "pvecm", "apt", "apt-get", "systemctl", "journalctl"]:
+                final_cmd = f"sudo {raw_command}"
+            else:
+                final_cmd = raw_command
 
         if final_cmd:
             try:
