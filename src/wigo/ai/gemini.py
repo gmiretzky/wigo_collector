@@ -115,8 +115,7 @@ class GeminiProvider(AIProvider):
         [
           {{
             "agent_hostname": "hostname",
-            "verb": "command_verb",
-            "parameters": "full command string to be executed",
+            "command": "full command string to be executed (including verb and args)",
             "reasoning": "Internal AI thought process",
             "rationale": "Human-readable explanation for the user"
           }}

@@ -85,8 +85,7 @@ async def send_message(msg: MessageCreate, db: Session = Depends(get_db)):
                 target_agent = db.query(Agent).filter(Agent.hostname == pa['agent_hostname']).first()
                 if not target_agent:
                     target_agent = agent # Default to current agent
-                
-                command_str = pa['parameters']
+                command_str = pa.get('command', pa.get('parameters', '')).strip()
                 perm_level = get_permission_level(target_agent.brand, command_str)
                 
                 new_action = Action(
