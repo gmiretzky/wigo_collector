@@ -162,6 +162,10 @@ async def run_ai_analysis(action_id: int, command: str, stdout: str, stderr: str
         # 1. Human-readable analysis for the UI
         analysis = await brain.analyze_result(command, stdout, stderr, exit_code)
         
+        action = db.query(Action).filter(Action.id == action_id).first()
+        if not action:
+            return
+            
         action.ai_analysis = analysis
         db.commit()
 

@@ -1,56 +1,37 @@
 import os
 import json
-from google import genai
+import httpx
 from src.wigo.ai.brain import AIProvider
-from typing import Optional
-
+from typing import Optional, List
 from src.wigo.database import get_setting
 
-class GeminiProvider(AIProvider):
+class OllamaProvider(AIProvider):
     def __init__(self):
-        self.api_key = get_setting("ai_token") or os.getenv("GEMINI_API_KEY")
-        if not self.api_key:
-            print("[!] WARNING: GEMINI_API_KEY is not set. AI features will fail.")
-        else:
-            self.client = genai.Client(api_key=self.api_key)
-        
-        self.model_name = get_setting("ai_model", "gemini-1.5-pro-latest")
+        self.base_url = get_setting("ollama_url", "http://localhost:11434").rstrip('/')
+        self.model_name = get_setting("ai_model", "llama3")
+        # Ensure we don't try to pass gemini models to ollama
+        if "gemini" in self.model_name.lower():
+            self.model_name = "llama3"
 
     async def _generate(self, prompt: str) -> str:
-        if not self.api_key:
-            print("[!] AI ERROR: Attempted to generate content without GEMINI_API_KEY")
-            raise Exception("GEMINI_API_KEY missing")
+        url = f"{self.base_url}/api/generate"
+        payload = {
+            "model": self.model_name,
+            "prompt": prompt,
+            "stream": False
+        }
         
-        print(f"\n--- AI PROMPT ---\n{prompt}\n-----------------")
+        print(f"\n--- OLLAMA PROMPT ({self.model_name}) ---\n{prompt}\n-----------------")
         try:
-            response = self.client.models.generate_content(
-                model=self.model_name,
-                contents=prompt
-            )
-            print(f"\n--- AI RESPONSE ---\n{response.text}\n-------------------")
-            return response.text.strip()
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.post(url, json=payload)
+                response.raise_for_status()
+                result = response.json()
+                text = result.get("response", "").strip()
+                print(f"\n--- OLLAMA RESPONSE ---\n{text}\n-------------------")
+                return text
         except Exception as e:
-            err_msg = str(e)
-            print(f"[!] AI ERROR: {err_msg}")
-            
-            # Check for 503 Unavailable
-            if "503" in err_msg or "UNAVAILABLE" in err_msg:
-                fallback_model = get_setting("ai_fallback_model", "")
-                if fallback_model and fallback_model != self.model_name:
-                    print(f"[*] AI Fallback: Primary model {self.model_name} unavailable. Retrying with {fallback_model}...")
-                    try:
-                        import time
-                        time.sleep(2) # Brief backoff
-                        response = self.client.models.generate_content(
-                            model=fallback_model,
-                            contents=prompt
-                        )
-                        print(f"\n--- AI RESPONSE (Fallback) ---\n{response.text}\n-------------------")
-                        return "[⚠️ Fallback used due to high demand] " + response.text.strip()
-                    except Exception as fallback_err:
-                        print(f"[!] AI Fallback ERROR: {str(fallback_err)}")
-                        raise fallback_err
-            
+            print(f"[!] OLLAMA ERROR: {str(e)}")
             raise e
 
     async def analyze(self, data: str) -> dict:
@@ -94,7 +75,7 @@ class GeminiProvider(AIProvider):
         except Exception as e:
             return f"Error during analysis: {str(e)}"
 
-    async def intent_to_actions(self, user_text: str, agents: list[dict]) -> list[dict]:
+    async def intent_to_actions(self, user_text: str, agents: List[dict]) -> List[dict]:
         agents_str = json.dumps(agents, indent=2)
         prompt = f"""
         You are the WIGO C2 Intent-to-Action Engine.
@@ -135,7 +116,8 @@ class GeminiProvider(AIProvider):
             return []
 
     def is_available(self) -> bool:
-        return self.api_key is not None and len(self.api_key) > 0
+        # A simple check could be added here, but for now we assume true if configured
+        return True
 
     async def decide_follow_up(self, command: str, result: str, iteration: int) -> Optional[dict]:
         if iteration >= 3:
@@ -160,7 +142,7 @@ class GeminiProvider(AIProvider):
         """
         try:
             text = await self._generate(prompt)
-            if text == "NONE":
+            if text.strip() == "NONE":
                 return None
             if text.startswith("```json"):
                 text = text[7:-3]

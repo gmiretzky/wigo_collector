@@ -215,11 +215,25 @@
                                     <input type="password" name="ai_token" class="form-control" placeholder="Enter API Key">
                                 </div>
                                 <div class="form-group">
-                                    <label>AI Model</label>
+                                    <label>Primary AI Model</label>
                                     <select name="ai_model" id="ai-model-select" class="form-control">
                                         <option value="">Loading models...</option>
                                     </select>
                                     <small class="form-text text-muted">Save API key first to discover models.</small>
+                                </div>
+                                <div class="form-group">
+                                    <label>Fallback AI Model (for 503 errors)</label>
+                                    <select name="ai_fallback_model" id="ai-fallback-model-select" class="form-control">
+                                        <option value="">Loading models...</option>
+                                    </select>
+                                </div>
+                                <div class="form-group" style="display: flex; align-items: center; gap: 10px; margin-top: 10px; margin-bottom: 15px;">
+                                    <input type="checkbox" name="ai_prioritize_local" id="ai_prioritize_local" style="width: auto;">
+                                    <label for="ai_prioritize_local" style="margin: 0;">Prioritize Local AI (Try Local before Gemini)</label>
+                                </div>
+                                <div class="form-group">
+                                    <label>Local Ollama URL</label>
+                                    <input type="text" name="ollama_url" class="form-control" placeholder="http://localhost:11434">
                                 </div>
                                 <div class="form-group">
                                     <label>Notification Webhook URL</label>
@@ -502,24 +516,33 @@
             if (settings.ai_provider) form.elements.ai_provider.value = settings.ai_provider;
             if (settings.ai_token) form.elements.ai_token.value = settings.ai_token;
             if (settings.notification_url) form.elements.notification_url.value = settings.notification_url;
+            if (settings.ollama_url) form.elements.ollama_url.value = settings.ollama_url;
+            if (settings.ai_prioritize_local) form.elements.ai_prioritize_local.checked = (settings.ai_prioritize_local === 'true');
             
             // Fetch models based on current provider
             await fetchModels(settings.ai_provider || 'gemini');
             
             if (settings.ai_model) form.elements.ai_model.value = settings.ai_model;
+            if (settings.ai_fallback_model) form.elements.ai_fallback_model.value = settings.ai_fallback_model;
         }
 
         async function fetchModels(provider) {
             const select = document.getElementById('ai-model-select');
+            const fallbackSelect = document.getElementById('ai-fallback-model-select');
             select.innerHTML = '<option value="">Loading models...</option>';
+            fallbackSelect.innerHTML = '<option value="">Loading models...</option>';
             try {
                 const res = await fetch(`/api/config/models?provider=${provider}`);
                 const models = await res.json();
-                select.innerHTML = models.map(m => `
+                const optionsHTML = models.map(m => `
                     <option value="${m.id}">${m.name}</option>
                 `).join('');
+                
+                select.innerHTML = optionsHTML;
+                fallbackSelect.innerHTML = '<option value="">None (Disable Fallback)</option>' + optionsHTML;
             } catch (err) {
                 select.innerHTML = '<option value="">Error loading models</option>';
+                fallbackSelect.innerHTML = '<option value="">Error loading models</option>';
             }
         }
 
@@ -532,6 +555,7 @@
             e.preventDefault();
             const formData = new FormData(e.target);
             const data = Object.fromEntries(formData.entries());
+            data['ai_prioritize_local'] = e.target.elements.ai_prioritize_local.checked ? 'true' : 'false';
             await fetch('/api/config/settings', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
