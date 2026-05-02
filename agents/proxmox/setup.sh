@@ -95,6 +95,7 @@ cat <<EOF > /etc/sudoers.d/wigo
 wigo ALL=(ALL) NOPASSWD: /usr/sbin/qm *
 wigo ALL=(ALL) NOPASSWD: /usr/sbin/pct *
 wigo ALL=(ALL) NOPASSWD: /usr/bin/pvesh *
+wigo ALL=(ALL) NOPASSWD: /usr/sbin/pvesm *
 wigo ALL=(ALL) NOPASSWD: /usr/bin/journalctl *
 wigo ALL=(ALL) NOPASSWD: /usr/bin/grep *
 EOF

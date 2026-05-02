@@ -221,7 +221,7 @@ class WigoProxmoxAgent:
         else:
             # Fallback/Unknown
             cmd_parts = raw_command.split()
-            if cmd_parts and cmd_parts[0] in ["qm", "pct", "pvesh", "pvecm", "apt", "apt-get", "systemctl", "journalctl"]:
+            if cmd_parts and cmd_parts[0] in ["qm", "pct", "pvesh", "pvecm", "pvesm", "apt", "apt-get", "systemctl", "journalctl"]:
                 final_cmd = f"sudo {raw_command}"
             else:
                 final_cmd = raw_command
@@ -237,6 +237,12 @@ class WigoProxmoxAgent:
                 )
                 stdout, stderr = process.communicate()
                 exit_code = process.returncode
+                
+                # Check for specific Proxmox privilege errors
+                if exit_code == 255 and ("Unable to load access control list" in stderr or "Unknown error -1" in stderr):
+                    hint = "\n[WIGO HINT: Proxmox returned an ACL/IPC error. This usually means the command requires root/sudo privileges but was executed as a standard user. Ensure the command is prefixed with 'sudo' and configured in /etc/sudoers.d/wigo.]"
+                    stderr += hint
+                
                 await self.report_result(action_id, stdout, stderr, exit_code)
             except Exception as e:
                 await self.report_result(action_id, "", str(e), 1)
