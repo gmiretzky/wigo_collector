@@ -46,6 +46,18 @@ if systemctl list-unit-files | grep -q "^${SERVICE_NAME}"; then
         chown wigo:wigo /usr/local/bin/wigo-proxmox.py
         chmod +x /usr/local/bin/wigo-proxmox.py
         
+        # Update sudoers
+        echo "Updating sudoers configuration..."
+        cat <<EOF > /etc/sudoers.d/wigo
+wigo ALL=(ALL) NOPASSWD: /usr/sbin/qm *
+wigo ALL=(ALL) NOPASSWD: /usr/sbin/pct *
+wigo ALL=(ALL) NOPASSWD: /usr/bin/pvesh *
+wigo ALL=(ALL) NOPASSWD: /usr/sbin/pvesm *
+wigo ALL=(ALL) NOPASSWD: /usr/bin/journalctl *
+wigo ALL=(ALL) NOPASSWD: /usr/bin/grep *
+EOF
+        chmod 440 /etc/sudoers.d/wigo
+        
         # Update python dependencies
         sudo -u wigo /home/wigo/venv/bin/pip install httpx cryptography pyyaml psutil > /dev/null 2>&1
         
