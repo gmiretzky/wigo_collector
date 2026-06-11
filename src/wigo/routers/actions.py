@@ -1,21 +1,37 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from src.wigo.database import get_db, Agent, Action, ActionStatus, ChatMessage
 from src.wigo.ai.brain import get_brain
+from src.wigo.rate_limit import limiter
 import uuid
 import datetime
 
 import hmac
 import hashlib
 import time
+from typing import Optional
 
 router = APIRouter()
+
+# Nonce replay-attack prevention: {nonce: expiry_unix_ts}
+_seen_nonces: dict = {}
+_NONCE_WINDOW = 300
+
+def _consume_nonce(nonce: str):
+    now = time.time()
+    expired = [k for k, v in _seen_nonces.items() if v < now]
+    for k in expired:
+        del _seen_nonces[k]
+    if nonce in _seen_nonces:
+        raise HTTPException(status_code=403, detail="Duplicate nonce (replay rejected)")
+    _seen_nonces[nonce] = now + _NONCE_WINDOW
 
 class TelemetryBurst(BaseModel):
     hostname: str
     data: str
     timestamp: int
+    nonce: str
     hmac_signature: str
 
 class ActionResult(BaseModel):
@@ -23,6 +39,7 @@ class ActionResult(BaseModel):
     stderr: str
     exit_code: int
     timestamp: int
+    nonce: str
     hmac_signature: str
 
 def verify_agent_hmac(agent: Agent, msg_parts: list, signature: str) -> bool:
@@ -37,14 +54,16 @@ def check_timestamp(ts: int):
         raise HTTPException(status_code=403, detail="Request expired")
 
 @router.post("/actions/telemetry")
-async def receive_telemetry(burst: TelemetryBurst, db: Session = Depends(get_db)):
+@limiter.limit("30/minute")
+async def receive_telemetry(request: Request, burst: TelemetryBurst, db: Session = Depends(get_db)):
     agent = db.query(Agent).filter(Agent.hostname == burst.hostname).first()
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not registered")
     
-    # Validate HMAC
+    # Validate HMAC + nonce
     check_timestamp(burst.timestamp)
-    if not verify_agent_hmac(agent, [burst.hostname, burst.timestamp], burst.hmac_signature):
+    _consume_nonce(burst.nonce)
+    if not verify_agent_hmac(agent, [burst.hostname, burst.timestamp, burst.nonce], burst.hmac_signature):
         raise HTTPException(status_code=403, detail="Invalid HMAC signature")
 
     # Process with AI
@@ -110,17 +129,19 @@ from src.wigo.utils.logging import log_c2
 import json
 
 @router.get("/actions/pending")
-def get_pending_actions(hostname: str, timestamp: int, hmac_signature: str, db: Session = Depends(get_db)):
+@limiter.limit("240/minute")
+def get_pending_actions(request: Request, hostname: str, timestamp: int, nonce: str, hmac_signature: str, db: Session = Depends(get_db)):
     """
     Endpoint for agents to poll for instructions.
     """
     agent = db.query(Agent).filter(Agent.hostname == hostname).first()
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not registered")
-    
-    # Validate HMAC
+
+    # Validate HMAC + nonce
     check_timestamp(timestamp)
-    if not verify_agent_hmac(agent, [hostname, timestamp], hmac_signature):
+    _consume_nonce(nonce)
+    if not verify_agent_hmac(agent, [hostname, timestamp, nonce], hmac_signature):
         log_c2("WARNING", None, f"Auth Failure: Invalid HMAC from {hostname}")
         raise HTTPException(status_code=403, detail="Invalid HMAC signature")
 
@@ -219,9 +240,10 @@ async def receive_action_result(action_id: int, result: ActionResult, background
     agent = action.agent
     trace_id = action.trace_id
     
-    # Validate HMAC
+    # Validate HMAC + nonce
     check_timestamp(result.timestamp)
-    if not verify_agent_hmac(agent, [action_id, result.timestamp], result.hmac_signature):
+    _consume_nonce(result.nonce)
+    if not verify_agent_hmac(agent, [action_id, result.timestamp, result.nonce], result.hmac_signature):
         log_c2("WARNING", trace_id, f"Result Auth Failure: Invalid HMAC for Action {action_id}")
         raise HTTPException(status_code=403, detail="Invalid HMAC signature")
 

@@ -6,6 +6,9 @@ from fastapi.templating import Jinja2Templates
 from fastapi.middleware.cors import CORSMiddleware
 from src.wigo.database import init_db
 from src.wigo.routers import config, actions, registration, dashboard
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from src.wigo.rate_limit import limiter
 import os
 
 app = FastAPI(
@@ -13,6 +16,9 @@ app = FastAPI(
     description="HTTP Management Interface",
     version="2.0.0"
 )
+
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 app.add_middleware(
     CORSMiddleware,

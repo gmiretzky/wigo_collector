@@ -4,6 +4,7 @@ import time
 import yaml
 import logging
 import socket
+import shlex
 import subprocess
 import json
 import httpx
@@ -11,6 +12,7 @@ import psutil
 import asyncio
 import hmac
 import hashlib
+import uuid
 
 # --- Logging Setup ---
 LOG_DIR = "/var/log/wigo"
@@ -65,15 +67,16 @@ class WigoProxmoxAgent:
     def register(self):
         """Register with the controller using HMAC and token."""
         logger.info(f"Registering with controller at {self.mgmt_url}...")
-        
+
         try:
             ip_addr = socket.gethostbyname(socket.gethostname())
-        except:
+        except Exception:
             ip_addr = "127.0.0.1"
-        
+
         timestamp = int(time.time())
-        signature = self.generate_hmac([self.hostname, ip_addr, timestamp])
-        
+        nonce = str(uuid.uuid4())
+        signature = self.generate_hmac([self.hostname, ip_addr, timestamp, nonce])
+
         payload = {
             "hostname": self.hostname,
             "ip_address": ip_addr,
@@ -83,6 +86,7 @@ class WigoProxmoxAgent:
             "software_version": "1.0.0",
             "registration_token": self.token,
             "timestamp": timestamp,
+            "nonce": nonce,
             "hmac_signature": signature
         }
         
@@ -101,11 +105,13 @@ class WigoProxmoxAgent:
     async def poll_actions(self):
         """Polls the Controller for pending actions."""
         timestamp = int(time.time())
-        signature = self.generate_hmac([self.hostname, timestamp])
-        
+        nonce = str(uuid.uuid4())
+        signature = self.generate_hmac([self.hostname, timestamp, nonce])
+
         params = {
             "hostname": self.hostname,
             "timestamp": timestamp,
+            "nonce": nonce,
             "hmac_signature": signature
         }
         
@@ -168,9 +174,10 @@ class WigoProxmoxAgent:
                 logs.append({"source": "journalctl", "content": res.stdout})
             
             # Check for failed migrations or cluster errors in syslog specifically
-            res = subprocess.run(["sudo", "grep", "-iE", "error|failed|migration", "/var/log/syslog", "|", "tail", "-n", "10"], shell=True, capture_output=True, text=True)
-            if res.returncode == 0:
-                logs.append({"source": "syslog_grep", "content": res.stdout})
+            res = subprocess.run(["sudo", "grep", "-iE", "error|failed|migration", "/var/log/syslog"], capture_output=True, text=True)
+            if res.returncode in (0, 1):  # grep returns 1 when no matches found
+                lines = res.stdout.strip().split('\n') if res.stdout.strip() else []
+                logs.append({"source": "syslog_grep", "content": '\n'.join(lines[-10:])})
         except Exception as e:
             logger.error(f"Failed to collect logs: {e}")
             
@@ -227,35 +234,42 @@ class WigoProxmoxAgent:
                 final_cmd = raw_command
 
         if final_cmd:
+            proc = None
             try:
-                process = subprocess.Popen(
-                    final_cmd,
-                    shell=True,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                    text=True
+                proc = await asyncio.create_subprocess_exec(
+                    *shlex.split(final_cmd),
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE
                 )
-                stdout, stderr = process.communicate()
-                exit_code = process.returncode
-                
+                stdout_b, stderr_b = await asyncio.wait_for(proc.communicate(), timeout=60)
+                exit_code = proc.returncode
+                stdout = stdout_b.decode()
+                stderr = stderr_b.decode()
+
                 # Check for specific Proxmox privilege errors
                 if exit_code == 255 and ("Unable to load access control list" in stderr or "Unknown error -1" in stderr):
-                    hint = "\n[WIGO HINT: Proxmox returned an ACL/IPC error. This usually means the command requires root/sudo privileges but was executed as a standard user. Ensure the command is prefixed with 'sudo' and configured in /etc/sudoers.d/wigo.]"
+                    hint = "\n[WIGO HINT: Proxmox returned an ACL/IPC error. Ensure the command is prefixed with 'sudo' and configured in /etc/sudoers.d/wigo.]"
                     stderr += hint
-                
+
                 await self.report_result(action_id, stdout, stderr, exit_code)
+            except asyncio.TimeoutError:
+                if proc:
+                    proc.kill()
+                await self.report_result(action_id, "", "Command timed out after 60 seconds", 1)
             except Exception as e:
                 await self.report_result(action_id, "", str(e), 1)
 
     async def report_result(self, action_id, stdout, stderr, exit_code):
         timestamp = int(time.time())
-        signature = self.generate_hmac([action_id, timestamp])
-        
+        nonce = str(uuid.uuid4())
+        signature = self.generate_hmac([action_id, timestamp, nonce])
+
         payload = {
             "stdout": stdout,
             "stderr": stderr,
             "exit_code": exit_code,
             "timestamp": timestamp,
+            "nonce": nonce,
             "hmac_signature": signature
         }
         async with httpx.AsyncClient(verify=True) as client:

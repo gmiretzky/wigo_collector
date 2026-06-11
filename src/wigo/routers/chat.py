@@ -1,7 +1,8 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from src.wigo.database import get_db, ChatMessage, Agent
+from src.wigo.rate_limit import limiter
 from typing import List, Optional
 import datetime
 
@@ -29,7 +30,8 @@ from src.wigo.database import get_db, ChatMessage, Agent, Action, ActionStatus
 from src.wigo.utils.logging import log_c2
 
 @router.post("/chat/send", response_model=MessageSchema)
-async def send_message(msg: MessageCreate, db: Session = Depends(get_db)):
+@limiter.limit("10/minute")
+async def send_message(request: Request, msg: MessageCreate, db: Session = Depends(get_db)):
     """
     Send a message from the management interface or remote source to an agent.
     If the sender is 'user', automatically create an Action for the agent to poll.
@@ -124,7 +126,8 @@ from src.wigo.config import get_permission_level
 from src.wigo.utils.logging import log_audit
 
 @router.post("/chat/global")
-async def send_global_message(msg: GlobalMessageCreate, db: Session = Depends(get_db)):
+@limiter.limit("10/minute")
+async def send_global_message(request: Request, msg: GlobalMessageCreate, db: Session = Depends(get_db)):
     """
     Global Intent-to-Action handler.
     Translates user text into actions across multiple agents.
