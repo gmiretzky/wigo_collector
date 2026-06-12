@@ -2,21 +2,20 @@ version: '3.8'
 
 services:
   wigo-controller:
-    build:
-      context: .
-      dockerfile: docker/controller/Dockerfile
+    image: gmiretzky/wigo-controller:latest
     container_name: wigo-controller
     ports:
       - "8443:8443"
       - "5000:5000"
     volumes:
       - ./certs:/app/certs
-      - ./wigo.db:/app/wigo.db
+      - ./data:/app/data
       - ./logs:/app/logs
       - /var/run/docker.sock:/var/run/docker.sock
     environment:
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - CONTROLLER_URL=${CONTROLLER_URL:-http://wigo-controller:5000}
+      - WIGO_DATA_DIR=/app/data
     command: python src/wigo/main.py
 
 networks:

@@ -52,9 +52,10 @@ def monitor_certs(p_agents):
         time.sleep(5)
 
 if __name__ == "__main__":
-    # Ensure directories exist
+    # Ensure directories exist and CA cert is generated
     os.makedirs(CA_DIR, exist_ok=True)
-    
+    pki.ensure_ca()
+
     # Create processes for both servers
     p1 = multiprocessing.Process(target=run_management)
     p2 = multiprocessing.Process(target=run_agents)

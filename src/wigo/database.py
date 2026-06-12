@@ -3,6 +3,8 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
 import datetime
 import enum
+import os
+from pathlib import Path
 
 Base = declarative_base()
 
@@ -84,8 +86,10 @@ class ChatMessage(Base):
 
     agent = relationship("Agent")
 
-# Database setup
-DATABASE_URL = "sqlite:///./wigo.db"
+# Database setup — absolute path so it works regardless of working directory
+_DATA_DIR = Path(os.getenv("WIGO_DATA_DIR", Path(__file__).resolve().parent.parent.parent))
+_DATA_DIR.mkdir(parents=True, exist_ok=True)
+DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///{_DATA_DIR}/wigo.db")
 engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
