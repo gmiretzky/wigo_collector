@@ -1,3 +1,7 @@
+# Local deployment config — never commit these
+.env
+docker-compose.override.yaml
+
 # Tools
 git-tools/
 scripts/

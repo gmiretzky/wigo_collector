@@ -1,5 +1,35 @@
 # WIGO Deployment & Certificate Management
 
+## First-time Setup
+
+```bash
+git clone <repo-url>
+cd wigo_collector
+
+# 1. Create your local secrets file (never committed to git)
+cp .env.example .env
+# Edit .env and set GEMINI_API_KEY
+
+# 2. Create your local compose overrides (never committed to git)
+cp docker-compose.override.yaml.example docker-compose.override.yaml
+# Edit docker-compose.override.yaml to add any local volumes or paths
+
+# 3. Start the stack
+docker compose up -d --build
+```
+
+## Updating (after initial setup)
+
+```bash
+git pull                        # safe — never touches .env or docker-compose.override.yaml
+docker compose up -d --build
+```
+
+> Your `.env` and `docker-compose.override.yaml` are listed in `.gitignore` and will never
+> be overwritten by git. All secrets and local customizations live only on your host.
+
+---
+
 WIGO uses standard TLS for server validation and HMAC-based authentication for agents. This removes the need for managing a private CA and individual agent certificates.
 
 ## 1. Server Certificates

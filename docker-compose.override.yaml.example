@@ -1,0 +1,15 @@
+# Copy this file to docker-compose.override.yaml and adjust to your environment.
+# docker-compose.override.yaml is NOT tracked by git — safe to put local paths,
+# extra volumes, port remaps, and other host-specific settings here.
+#
+# Docker Compose automatically merges this file with docker-compose.yaml.
+
+services:
+  wigo-controller:
+    volumes:
+      # Mount local source for live-reload during development (remove in production):
+      - ./src:/app/src
+      - ./agents:/app/agents
+      # Override cert path if your certs live elsewhere:
+      # - /etc/letsencrypt/live/yourdomain.com/fullchain.pem:/app/certs/fullchain.pem
+      # - /etc/letsencrypt/live/yourdomain.com/privkey.pem:/app/certs/privkey.pem
